@@ -1,0 +1,87 @@
+# EvoSpec Project Configuration
+# This file is created by `evospec init` at the root of your project.
+
+project:
+  name: ""
+  description: ""
+  version: "0.1.0"
+
+# Where specs live relative to project root
+paths:
+  specs: "specs/changes"
+  templates: "specs/_templates"
+  adrs: "docs/adr"
+  domain: "specs/domain"
+  checks: "specs/checks"
+
+# Schema validation
+schema:
+  version: "1.0.0"
+  spec_schema: "https://evospec.dev/schemas/spec.schema.json"
+
+# Classification defaults
+classification:
+  # Fields that automatically push a change to "core" zone
+  core_triggers:
+    - touches_persistence
+    - touches_auth
+    - touches_billing
+    - touches_audit
+    - touches_multi_tenancy
+  # Default reversibility when not specified
+  default_reversibility: "moderate"
+
+# Team Topologies
+teams: []
+  # - name: "product-core"
+  #   type: "stream-aligned"
+  #   bounded_contexts: ["identity", "orders"]
+  # - name: "platform"
+  #   type: "platform"
+  #   bounded_contexts: ["infrastructure", "observability"]
+
+# Bounded Contexts registry
+bounded_contexts: []
+  # - name: "identity"
+  #   owner: "product-core"
+  #   type: "core"  # core | supporting | generic
+  # - name: "orders"
+  #   owner: "product-core"
+  #   type: "core"
+
+# Features registry — tracks feature lifecycle across the Knowledge Funnel
+features: []
+  # - id: "feat-001"
+  #   title: "Smart Recommendations"
+  #   zone: "edge"
+  #   status: "discovery"  # discovery | specifying | implementing | validating | shipped | killed
+  #   knowledge_stage: "mystery"  # mystery | heuristic | algorithm
+  #   spec_path: "specs/changes/2026-03-01-smart-recs"
+  #   owner: "product-core"
+  #   created_at: "2026-03-01"
+  #   shipped_at: ""
+  #   kill_reason: ""
+
+# Fitness function runners
+fitness_functions:
+  # Command to run all fitness functions
+  run_command: ""  # e.g., "pytest tests/fitness/ -v"
+  # Individual test runner (used by MCP server)
+  test_runner: "pytest"  # pytest | jest | go test
+  # CI integration
+  ci_gate: false
+
+# Reverse engineering configuration
+reverse:
+  framework: ""  # fastapi | django | express | spring | rails
+  source_dirs: []
+  # - "app/api"
+  # - "app/models"
+
+# Strategic context (Roger Martin — Playing to Win)
+strategy:
+  winning_aspiration: ""
+  where_to_play: ""
+  how_to_win: ""
+  must_have_capabilities: []
+  enabling_systems: []

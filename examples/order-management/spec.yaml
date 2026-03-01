@@ -1,0 +1,124 @@
+# EvoSpec Worked Example — Core Zone
+# This is a worked example of a CORE zone spec for an Order Management domain.
+
+id: "order-management"
+title: "Order Management CRUD API"
+zone: "core"
+change_type: "improvement"
+status: "accepted"
+created_at: "2025-06-01"
+updated_at: "2025-06-15"
+
+classification:
+  touches_persistence: true
+  touches_auth: true
+  touches_billing: true
+  touches_audit: true
+  touches_multi_tenancy: true
+  crosses_context_boundary: false
+  is_hypothesis: false
+  reversibility: "difficult"
+  risk_level: "high"
+  rationale: |
+    Orders are a core domain entity that defines the heart of the
+    e-commerce platform. Changes here affect billing, inventory,
+    and customer trust. Full domain contract required.
+
+bounded_context: "orders"
+
+ownership:
+  team: "commerce-core"
+  team_type: "stream-aligned"
+  interaction_mode: "x-as-a-service"
+
+strategic_fit:
+  winning_aspiration: "Be the most reliable e-commerce platform for SMBs"
+  where_to_play: "Small and medium businesses selling physical products"
+  how_to_win: "Fast, reliable order processing with real-time inventory"
+  capability_strengthened: "Order fulfillment reliability"
+
+invariants:
+  - id: "INV-001"
+    statement: "Every Order must have at least one LineItem"
+    enforcement: "test"
+    fitness_function: "tests/fitness/test_order_integrity.py"
+  - id: "INV-002"
+    statement: "Every database query on orders must filter by the authenticated user's tenant_id"
+    enforcement: "test"
+    fitness_function: "tests/fitness/test_tenant_isolation.py"
+  - id: "INV-003"
+    statement: "Order status transitions must follow: draft → submitted → processing → shipped → delivered (no reverse)"
+    enforcement: "test"
+    fitness_function: "tests/fitness/test_order_state_machine.py"
+
+fitness_functions:
+  - name: "Order integrity check"
+    type: "integration-test"
+    path: "tests/fitness/test_order_integrity.py"
+    dimension: "data-integrity"
+  - name: "Tenant isolation check"
+    type: "integration-test"
+    path: "tests/fitness/test_tenant_isolation.py"
+    dimension: "security"
+  - name: "Order state machine check"
+    type: "unit-test"
+    path: "tests/fitness/test_order_state_machine.py"
+    dimension: "data-integrity"
+
+adrs:
+  - "docs/adr/0001-use-event-sourcing.md"
+  - "docs/adr/0002-tenant-isolation-strategy.md"
+
+traceability:
+  endpoints:
+    - "GET /v1/orders/"
+    - "POST /v1/orders/"
+    - "GET /v1/orders/{id}"
+    - "PUT /v1/orders/{id}"
+    - "POST /v1/orders/{id}/submit"
+  tables:
+    - "orders"
+    - "line_items"
+  modules:
+    - "app/api/v1/endpoints/orders.py"
+    - "app/models/order.py"
+    - "app/models/line_item.py"
+    - "app/schemas/order.py"
+  events:
+    - "order.created"
+    - "order.submitted"
+    - "order.shipped"
+  migrations:
+    - "alembic/versions/001_create_orders.py"
+
+invariant_impact:
+  conflicts: []
+  entities_touched: ["Order", "LineItem"]
+  contexts_touched: ["orders"]
+  reviewed: true
+
+discovery:
+  outcome: ""
+  opportunity: ""
+  iteration: 1
+  cadence: "weekly"
+  next_checkpoint: ""
+  assumptions: []
+  experiments: []
+  kill_criteria: ""
+  kill_deadline: ""
+  learnings: []
+
+design_thinking:
+  current_phase: ""
+  problem_statement: ""
+  ideas_explored: 0
+  empathy_artifacts: []
+  prototypes: []
+
+organizational_risk:
+  derailer_risks:
+    - "Over-engineering: temptation to build full ERP before validating core order flow"
+  cultural_constraints:
+    - "Team prefers 'move fast' but orders require correctness"
+  mitigation: "TDD-first approach ensures correctness without slowing iteration"

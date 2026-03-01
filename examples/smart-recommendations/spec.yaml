@@ -1,0 +1,161 @@
+# EvoSpec Worked Example — Edge Zone
+# This is a worked example of an EDGE zone spec for a product recommendations experiment.
+
+id: "smart-recommendations"
+title: "Smart Product Recommendations"
+zone: "edge"
+change_type: "experiment"
+status: "in-progress"
+created_at: "2026-03-01"
+updated_at: "2026-03-15"
+
+classification:
+  touches_persistence: false
+  touches_auth: false
+  touches_billing: false
+  touches_audit: false
+  touches_multi_tenancy: false
+  crosses_context_boundary: false
+  is_hypothesis: true
+  reversibility: "trivial"
+  risk_level: "low"
+  rationale: |
+    This is a pure exploration of how personalized recommendations
+    affect user engagement. No schema changes, no core domain impact.
+    Can be rolled back by disabling a feature flag.
+
+bounded_context: ""
+
+ownership:
+  team: "growth"
+  team_type: "stream-aligned"
+  interaction_mode: "collaboration"
+
+strategic_fit:
+  winning_aspiration: "Be the most relevant product discovery experience for SMBs"
+  where_to_play: "Returning customers browsing the catalog"
+  how_to_win: "Personalized recommendations based on browsing and purchase history"
+  capability_strengthened: "Product discovery and conversion"
+
+invariants: []
+fitness_functions: []
+adrs: []
+
+traceability:
+  endpoints:
+    - "GET /v1/recommendations/"
+  tables: []
+  modules:
+    - "app/services/recommendations.py"
+  events: []
+  migrations: []
+
+invariant_impact:
+  conflicts: []
+  entities_touched: []
+  contexts_touched: []
+  reviewed: true
+
+discovery:
+  outcome: "Increase product page conversion rate by 10%"
+  opportunity: "HMW help returning customers find products they'll love without endless browsing?"
+  iteration: 2
+  cadence: "weekly"
+  next_checkpoint: "2026-03-22"
+
+  assumptions:
+    - id: "A-001"
+      statement: "Users prefer personalized recommendations over generic bestseller lists"
+      category: "desirability"
+      risk: "high"
+      status: "testing"
+      test_method: "A/B test: personalized vs. generic recommendations"
+      success_criteria: "≥ 15% higher click-through rate on personalized"
+      result: "12% improvement in first week — promising but not conclusive"
+      result_date: "2026-03-08"
+      learning: "Users engaged more but sample size was too small for significance"
+      pivot_to: ""
+    - id: "A-002"
+      statement: "Collaborative filtering outperforms content-based filtering for our catalog size"
+      category: "feasibility"
+      risk: "medium"
+      status: "untested"
+      test_method: "Offline evaluation on historical purchase data"
+      success_criteria: "≥ 20% improvement in precision@10 over content-based"
+      result: ""
+      result_date: ""
+      learning: ""
+      pivot_to: ""
+    - id: "A-003"
+      statement: "Recommendations can be generated in < 200ms for real-time display"
+      category: "feasibility"
+      risk: "low"
+      status: "validated"
+      test_method: "Load test with 1000 concurrent users"
+      success_criteria: "p99 latency < 200ms"
+      result: "p99 = 145ms with pre-computed embeddings"
+      result_date: "2026-03-05"
+      learning: "Pre-computing embeddings nightly keeps latency well within bounds"
+      pivot_to: ""
+
+  experiments:
+    - id: "EXP-001"
+      assumption_id: "A-003"
+      type: "spike"
+      description: "Built a prototype recommendation service with pre-computed embeddings and measured latency under load"
+      started_at: "2026-03-03"
+      completed_at: "2026-03-05"
+      sample_size: 1000
+      result: "p99 = 145ms, well within 200ms target"
+      confidence: "high"
+      decision: "continue"
+      next_experiment: "EXP-002"
+    - id: "EXP-002"
+      assumption_id: "A-001"
+      type: "A-B-test"
+      description: "Showed personalized recommendations to 500 users vs. generic bestsellers to 500 users"
+      started_at: "2026-03-06"
+      completed_at: "2026-03-13"
+      sample_size: 1000
+      result: "12% higher click-through on personalized, but p-value = 0.08 (not significant at 0.05)"
+      confidence: "medium"
+      decision: "continue"
+      next_experiment: "EXP-003"
+
+  kill_criteria: "If after 4 weeks of A/B testing, conversion rate doesn't improve by at least 5%, abandon personalized recommendations and focus on improved search instead."
+  kill_deadline: "2026-04-01"
+
+  learnings:
+    - date: "2026-03-05"
+      iteration: 1
+      experiment_id: "EXP-001"
+      learning: "Pre-computing embeddings nightly keeps latency well within bounds"
+      impact: "Validated feasibility — can proceed with A/B test"
+      spec_changed: false
+    - date: "2026-03-13"
+      iteration: 1
+      experiment_id: "EXP-002"
+      learning: "Personalized recommendations show promise but need larger sample for significance"
+      impact: "Extended A/B test to 2000 users for 2 more weeks"
+      spec_changed: false
+
+design_thinking:
+  current_phase: "test"
+  problem_statement: "Returning customers spend an average of 8 minutes browsing before finding a product they want, leading to 40% abandonment before purchase."
+  ideas_explored: 4
+  empathy_artifacts:
+    - "User interviews (N=12): recordings in /research/interviews/"
+    - "Heatmap analysis of catalog browsing patterns"
+  prototypes:
+    - id: "PROTO-001"
+      type: "code-spike"
+      url: ""
+      experiment_id: "EXP-001"
+      feedback_summary: "Latency acceptable, recommendation quality needs tuning"
+
+organizational_risk:
+  derailer_risks:
+    - "Scope creep: temptation to build a full ML pipeline before validating the value"
+  cultural_constraints:
+    - "Data team is skeptical about recommendation quality with current catalog size"
+  mitigation: "Start with simple collaborative filtering, not deep learning. Validate value first."
