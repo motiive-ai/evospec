@@ -52,22 +52,25 @@ invariants:
     fitness_function: "tests/fitness/test_order_state_machine.py"
 
 fitness_functions:
-  - name: "Order integrity check"
+  - id: "FF-001"
+    name: "Order integrity check"
     type: "integration-test"
     path: "tests/fitness/test_order_integrity.py"
     dimension: "data-integrity"
-  - name: "Tenant isolation check"
+  - id: "FF-002"
+    name: "Tenant isolation check"
     type: "integration-test"
     path: "tests/fitness/test_tenant_isolation.py"
     dimension: "security"
-  - name: "Order state machine check"
+  - id: "FF-003"
+    name: "Order state machine check"
     type: "unit-test"
     path: "tests/fitness/test_order_state_machine.py"
     dimension: "data-integrity"
 
 adrs:
-  - "docs/adr/0001-use-event-sourcing.md"
-  - "docs/adr/0002-tenant-isolation-strategy.md"
+  - "docs/adr/0002-use-event-sourcing.md"
+  - "docs/adr/0003-tenant-isolation-strategy.md"
 
 traceability:
   endpoints:

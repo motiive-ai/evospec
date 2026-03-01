@@ -114,6 +114,8 @@ evospec check
 evospec reverse api --framework fastapi
 ```
 
+> **See [`examples/`](examples/) for a complete worked project** — a fictional e-commerce platform with a core zone spec (Order Management) and an edge zone spec (Smart Recommendations), fully filled in with all artifacts.
+
 ## Project Structure (after `evospec init`)
 
 ```
