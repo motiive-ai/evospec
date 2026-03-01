@@ -22,7 +22,11 @@ def slugify(title: str) -> str:
     return slug.strip("-")
 
 
-def create_spec(title: str, zone: str | None = None) -> None:
+def create_spec(
+    title: str,
+    zone: str | None = None,
+    change_type: str | None = None,
+) -> None:
     """Create a new change spec with appropriate templates."""
     root = find_project_root()
     if root is None:
@@ -41,6 +45,10 @@ def create_spec(title: str, zone: str | None = None) -> None:
         console.print(f"[red]✗ Spec directory already exists: {spec_dir}[/red]")
         return
 
+    # Default change_type based on zone
+    if change_type is None:
+        change_type = "experiment"  # safe default
+
     spec_dir.mkdir(parents=True)
     (spec_dir / "checks").mkdir()
 
@@ -54,23 +62,44 @@ def create_spec(title: str, zone: str | None = None) -> None:
         .replace("{{ id }}", slug)
         .replace("{{ title }}", title)
         .replace("{{ zone }}", zone or "edge")
+        .replace("{{ change_type | default('experiment') }}", change_type)
         .replace("{{ created_at }}", today)
     )
 
     (spec_dir / "spec.yaml").write_text(spec_content)
     console.print(f"[green]✓[/green] Created spec.yaml")
 
-    # Always create discovery spec for edge/hybrid
-    if zone in (None, "edge", "hybrid"):
+    # Create artifacts based on change_type and zone
+    if change_type == "improvement":
         _render_template(
-            TEMPLATE_DIR / "discovery-spec.md",
-            spec_dir / "discovery-spec.md",
+            TEMPLATE_DIR / "improvement-scope.md",
+            spec_dir / "improvement-scope.md",
             title=title,
-            zone=zone or "edge",
+            zone=zone or "hybrid",
             status="draft",
-            created_at=today,
         )
-        console.print(f"[green]✓[/green] Created discovery-spec.md")
+        console.print(f"[green]✓[/green] Created improvement-scope.md")
+    elif change_type == "bugfix":
+        _render_template(
+            TEMPLATE_DIR / "bugfix-report.md",
+            spec_dir / "bugfix-report.md",
+            title=title,
+            zone=zone or "hybrid",
+            status="draft",
+        )
+        console.print(f"[green]✓[/green] Created bugfix-report.md")
+    else:
+        # experiment — create discovery spec for edge/hybrid
+        if zone in (None, "edge", "hybrid"):
+            _render_template(
+                TEMPLATE_DIR / "discovery-spec.md",
+                spec_dir / "discovery-spec.md",
+                title=title,
+                zone=zone or "edge",
+                status="draft",
+                created_at=today,
+            )
+            console.print(f"[green]✓[/green] Created discovery-spec.md")
 
     # Create domain contract for core/hybrid
     if zone in ("core", "hybrid"):
@@ -84,7 +113,6 @@ def create_spec(title: str, zone: str | None = None) -> None:
         )
         console.print(f"[green]✓[/green] Created domain-contract.md")
 
-    # Always create domain contract for core
     if zone == "core":
         console.print()
         console.print(

@@ -27,11 +27,17 @@ def init(name: str, description: str) -> None:
 @cli.command()
 @click.argument("title")
 @click.option("--zone", type=click.Choice(["edge", "hybrid", "core"]), default=None)
-def new(title: str, zone: str | None) -> None:
+@click.option(
+    "--type", "change_type",
+    type=click.Choice(["experiment", "improvement", "bugfix"]),
+    default=None,
+    help="Type of change (experiment/improvement/bugfix). Defaults based on zone.",
+)
+def new(title: str, zone: str | None, change_type: str | None) -> None:
     """Create a new change spec."""
     from evospec.core.new_spec import create_spec
 
-    create_spec(title=title, zone=zone)
+    create_spec(title=title, zone=zone, change_type=change_type)
 
 
 @cli.command()

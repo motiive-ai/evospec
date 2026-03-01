@@ -199,10 +199,15 @@ def check_spec(spec_path: str | None = None) -> dict:
     if root is None:
         return {"error": "No evospec.yaml found."}
 
-    schema_path = root / "schemas" / "spec.schema.json"
+    # Look for schema: project root first, then package-bundled
     schema = None
+    schema_path = root / "schemas" / "spec.schema.json"
     if schema_path.exists():
         schema = json.loads(schema_path.read_text())
+    else:
+        pkg_schema = Path(__file__).parent.parent / "schemas" / "spec.schema.json"
+        if pkg_schema.exists():
+            schema = json.loads(pkg_schema.read_text())
 
     specs_dir = root / "specs" / "changes"
     if not specs_dir.exists():

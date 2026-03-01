@@ -10,17 +10,32 @@ from evospec.core.config import find_project_root, load_config, get_paths
 
 console = Console()
 
-SCHEMA_PATH = Path(__file__).parent.parent.parent.parent / "schemas" / "spec.schema.json"
+_PACKAGE_SCHEMA = Path(__file__).parent.parent / "schemas" / "spec.schema.json"
 
 
 def _load_schema() -> dict | None:
-    """Load the spec JSON schema."""
+    """Load the spec JSON schema.
+
+    Looks in two places:
+    1. The project root (schemas/spec.schema.json) — for local overrides
+    2. The installed package (evospec/schemas/) — for pipx installs
+    """
     import json
 
-    if not SCHEMA_PATH.exists():
-        return None
-    with open(SCHEMA_PATH) as f:
-        return json.load(f)
+    # Try project root first (allows local overrides)
+    root = find_project_root()
+    if root:
+        local_schema = root / "schemas" / "spec.schema.json"
+        if local_schema.exists():
+            with open(local_schema) as f:
+                return json.load(f)
+
+    # Fall back to package-bundled schema
+    if _PACKAGE_SCHEMA.exists():
+        with open(_PACKAGE_SCHEMA) as f:
+            return json.load(f)
+
+    return None
 
 
 def run_checks(strict: bool = False) -> None:

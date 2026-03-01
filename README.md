@@ -4,6 +4,26 @@
 
 EvoSpec is a spec-driven delivery toolkit that adapts specification rigor to change risk. It combines Continuous Discovery, Domain-Driven Design, Evolutionary Architecture, Design Thinking, Team Topologies, and Architecture Decision Records into a single, coherent workflow.
 
+## Not just code specs. The whole business.
+
+Most spec frameworks stop at technical requirements. EvoSpec doesn't.
+
+A single EvoSpec change spec captures **everything that matters** — from boardroom strategy to database migration:
+
+| Layer | What EvoSpec captures | Framework |
+|-------|----------------------|-----------|
+| **Strategy** | Why this matters. Where we play. How we win. | Roger Martin — Playing to Win |
+| **Discovery** | What we don't know yet. Assumptions. Experiments. Kill criteria. | Teresa Torres — Continuous Discovery |
+| **Domain** | What must always be true. Invariants. State machines. Events. | Evans/Vernon — Domain-Driven Design |
+| **Architecture** | Why we chose X over Y. Reversibility. Migration paths. | Nygard — ADRs + Neal Ford — Fitness Functions |
+| **Team** | Who owns this. Cognitive load. Interaction modes. | Skelton/Pais — Team Topologies |
+| **Risk** | Leadership derailers. Cultural constraints. Organizational blind spots. | Hogan — Organizational Personality |
+| **Implementation** | Phased tasks. Parallel opportunities. Exact file paths. AI-executable. | EvoSpec — AI Agent Integration |
+
+**One spec. Seven dimensions. Zero gaps between "what the business wants" and "what gets built."**
+
+Other frameworks give you a template and wish you luck. EvoSpec gives you executable guardrails — fitness functions that run in CI, invariant safety nets that prevent experiments from breaking core domain logic, and kill criteria that stop you from over-investing in ideas that don't work.
+
 ## Why
 
 Modern software teams face a paradox:

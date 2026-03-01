@@ -65,6 +65,9 @@ Issues = "https://github.com/evospec/evospec/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/evospec"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src/evospec", "schemas", "README.md", "LICENSE"]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
