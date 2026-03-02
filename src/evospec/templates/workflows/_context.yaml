@@ -128,6 +128,7 @@ mcp:
     - "get_upstream_apis(upstream_name?) — list API endpoints from upstream services"
     - "parse_contract_file(file_path) — extract entities from OpenAPI/JSON Schema/JSON example files"
   resources:
+    - "evospec://bootstrap — AI bootstrap prompt with project detection (works pre-init)"
     - "evospec://project — lean project metadata (name, description, paths)"
     - "evospec://glossary — ubiquitous language"
     - "evospec://context-map — bounded context relationships"
@@ -169,6 +170,7 @@ cli_commands:
   - "evospec learn                            # Interactive experiment recording"
   - "evospec adr new \"decision-title\"         # Create ADR"
   - "evospec render                           # Render all specs into consolidated markdown"
+  - "evospec prompt --detect                  # AI bootstrap prompt (works pre-init)"
   - "evospec serve                            # Start MCP server"
   - "evospec generate agents                  # Generate AI agent integration files"
 

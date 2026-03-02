@@ -57,7 +57,7 @@ Call `evospec:get_entities()` for canonical entity names. evospec check validate
 
 Start: `evospec serve`
 
-Resources: evospec://project, evospec://glossary, evospec://context-map, evospec://config, evospec://entities, evospec://invariants
+Resources: evospec://bootstrap, evospec://project, evospec://glossary, evospec://context-map, evospec://config, evospec://entities, evospec://invariants
 
 ## Knowledge Funnel
 

@@ -91,13 +91,33 @@ See [references/context.md](references/context.md) for full framework context.
    Within phases: T001 → T003 (sequential), T002 || T004 (parallel)
    ```
 
-7. **Report**
+7. **Report and wait for user approval *(interactive)***
+   Present the task plan summary:
    - Total task count
    - Tasks per phase
    - Parallel opportunities
    - Invariant coverage (% of invariants with tasks)
    - Suggested MVP scope
    - Estimated implementation phases
+   
+   **CRITICAL: STOP HERE.** Do NOT proceed to implementation.
+   The user MUST review the task plan and explicitly approve it before any code is written.
+   
+   Ask the user:
+   ```
+   The task plan is ready for review. Please check tasks.md and let me know:
+   1. Approve — proceed to implementation (`/evospec.implement`)
+   2. Adjust — tell me what to change (scope, order, add/remove tasks)
+   3. Split — break this into smaller PRs
+   ```
+   
+   Common iteration requests:
+   - "Too many tasks" → suggest MVP scope, defer rest to follow-up spec
+   - "Wrong order" → resequence phases
+   - "Missing X" → add tasks
+   - "Remove Y" → remove tasks and update dependency graph
+   
+   **Do NOT auto-start `/evospec.implement`.** The user will invoke it when ready.
 
 8. **Create implementation-spec.md skeleton (deliberate mode only)**
    **Skip this step for edge/experimental specs** — those should use `/evospec.capture`
@@ -130,6 +150,8 @@ See [references/context.md](references/context.md) for full framework context.
 - Every task must have an exact file path
 - Tasks must be specific enough for an AI agent to execute without asking questions
 - Maximum 50 tasks per spec (break into sub-specs if larger)
+- NEVER start implementing after generating tasks — ALWAYS wait for explicit user approval
+- The task plan is a proposal, not a command — the user may iterate multiple times before approving
 
 ---
 

@@ -1,5 +1,7 @@
 """EvoSpec CLI — Progressive specs at the edge. Contracts in the core."""
 
+from pathlib import Path
+
 import click
 
 from evospec import __version__
@@ -17,11 +19,18 @@ def cli() -> None:
 @cli.command()
 @click.option("--name", prompt="Project name", help="Name of the project.")
 @click.option("--description", default="", help="Short project description.")
-def init(name: str, description: str) -> None:
+@click.option("--detect", is_flag=True, help="Auto-detect project stack and pre-fill reverse config.")
+def init(name: str, description: str, detect: bool) -> None:
     """Initialize EvoSpec in the current project."""
     from evospec.core.init import init_project
 
-    init_project(name=name, description=description)
+    detection = None
+    if detect:
+        from evospec.core.prompt import detect_project_stack
+
+        detection = detect_project_stack(Path.cwd())
+
+    init_project(name=name, description=description, detection=detection)
 
 
 @cli.command()
@@ -221,6 +230,30 @@ def fitness() -> None:
     passed, failed, skipped = run_fitness_functions()
     if failed:
         raise SystemExit(1)
+
+
+@cli.command()
+@click.option("--detect", is_flag=True, help="Auto-detect project language, framework, ORM, and source dirs.")
+@click.option(
+    "--format", "fmt",
+    type=click.Choice(["markdown", "json"]),
+    default="markdown",
+    help="Output format (default: markdown).",
+)
+def prompt(detect: bool, fmt: str) -> None:
+    """Emit an AI bootstrap prompt with EvoSpec context.
+
+    Gives any AI agent everything it needs to configure EvoSpec on a project
+    without reading EvoSpec source code. Works without evospec.yaml (pre-init).
+    """
+    from evospec.core.prompt import generate_bootstrap_json, generate_bootstrap_prompt
+
+    if fmt == "json":
+        output = generate_bootstrap_json(detect=detect)
+    else:
+        output = generate_bootstrap_prompt(detect=detect)
+
+    click.echo(output)
 
 
 @cli.command()

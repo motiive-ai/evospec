@@ -26,11 +26,31 @@ Verify:
 evospec --version
 ```
 
+## AI Bootstrap (before init)
+
+If you're an AI agent encountering this project for the first time, or you want to give an AI agent instant context:
+
+```bash
+# Get a complete EvoSpec bootstrap prompt (~2KB, ~800 tokens)
+evospec prompt
+
+# With auto-detected project stack (language, framework, ORM, source dirs, git analysis)
+evospec prompt --detect
+
+# Structured JSON output for programmatic use
+evospec prompt --format json --detect
+```
+
+This works **without** `evospec.yaml` — it's designed for pre-init discovery. The output includes CLI reference, workflow commands, and (with `--detect`) recommended commands based on your project stack.
+
 ## Initialize Your Project
 
 ```bash
 cd your-project
 evospec init
+
+# Or with auto-detection (pre-fills reverse.framework and reverse.source_dirs)
+evospec init --detect
 ```
 
 This creates:

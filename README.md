@@ -122,8 +122,12 @@ pipx install -e ".[dev]"
 ## Quick Start
 
 ```bash
-# Initialize EvoSpec in your project
+# AI bootstrap: give any AI agent instant EvoSpec context (works pre-init)
+evospec prompt --detect
+
+# Initialize EvoSpec in your project (--detect pre-fills reverse config)
 evospec init
+evospec init --detect
 
 # Create a new change spec
 evospec new "user-onboarding-redesign"
@@ -301,7 +305,7 @@ evospec-mcp
 | `update_assumption(path, id, ...)` | Update assumption status or pivot direction |
 | `run_fitness_functions(path?)` | Execute fitness function tests |
 
-**Resources**: `evospec://config`, `evospec://glossary`, `evospec://context-map`, `evospec://invariants`, `evospec://entities`
+**Resources**: `evospec://bootstrap` (works pre-init), `evospec://config`, `evospec://glossary`, `evospec://context-map`, `evospec://invariants`, `evospec://entities`
 
 Any MCP-compatible agent (Claude Code, Cursor, custom agents) can connect to the server and use these tools directly.
 

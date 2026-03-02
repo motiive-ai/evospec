@@ -78,6 +78,17 @@ def get_glossary() -> str:
     return "No glossary found."
 
 
+@mcp.resource("evospec://bootstrap")
+def get_bootstrap() -> str:
+    """Return an AI bootstrap prompt with EvoSpec context and auto-detected project stack.
+
+    Works without evospec.yaml — designed for pre-init agent discovery.
+    """
+    from evospec.core.prompt import generate_bootstrap_prompt
+
+    return generate_bootstrap_prompt(detect=True)
+
+
 @mcp.resource("evospec://context-map")
 def get_context_map() -> str:
     """Return the bounded context map."""

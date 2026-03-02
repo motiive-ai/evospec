@@ -13,8 +13,18 @@ console = Console()
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 
 
-def init_project(name: str, description: str = "") -> None:
-    """Initialize EvoSpec directory structure and config in the current directory."""
+def init_project(
+    name: str,
+    description: str = "",
+    detection: "ProjectDetection | None" = None,
+) -> None:
+    """Initialize EvoSpec directory structure and config in the current directory.
+
+    Args:
+        name: Project name.
+        description: Short project description.
+        detection: Optional auto-detected project stack (from ``evospec prompt --detect``).
+    """
     project_root = Path.cwd()
     config_path = project_root / "evospec.yaml"
 
@@ -32,6 +42,19 @@ def init_project(name: str, description: str = "") -> None:
     ).replace(
         'description: ""', f'description: "{description}"', 1
     )
+
+    # Pre-fill reverse config from detection results
+    if detection:
+        import yaml as _yaml
+
+        config_data = _yaml.safe_load(config_content) or {}
+        reverse = config_data.get("reverse", {})
+        if detection.framework and not reverse.get("framework"):
+            reverse["framework"] = detection.framework
+        if detection.source_dirs and not reverse.get("source_dirs"):
+            reverse["source_dirs"] = detection.source_dirs
+        config_data["reverse"] = reverse
+        config_content = _yaml.dump(config_data, default_flow_style=False, sort_keys=False)
 
     with open(config_path, "w") as f:
         f.write(config_content)

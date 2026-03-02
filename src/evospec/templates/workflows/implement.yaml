@@ -31,7 +31,8 @@ steps:
       - Read `evospec.yaml` for project-level configuration
 
   - id: 3
-    title: "Pre-flight checks"
+    title: "Pre-flight checks and user approval"
+    interactive: true
     instructions: |
       - Count total tasks, completed tasks, remaining tasks
       - Identify current phase (first phase with incomplete tasks)
@@ -44,6 +45,21 @@ steps:
       Current Phase: [phase name]
       Remaining: [count] tasks
       ```
+
+      **CRITICAL: Ask for explicit user approval before executing any tasks.**
+
+      ```
+      Ready to implement. I'll start with Phase [N]: [name] ([count] tasks).
+      Shall I proceed?
+      ```
+
+      The user may:
+      - Approve the full plan → proceed phase by phase
+      - Approve one phase at a time → execute only the current phase, then ask again
+      - Adjust → go back to tasks.md and modify
+      - Skip phases → jump to a specific phase
+
+      **Do NOT write any code until the user confirms.**
 
   - id: 4
     title: "Execute tasks phase by phase"
@@ -135,9 +151,11 @@ error_handling:
   - "Missing dependency: Report which task/file is missing. Suggest resolution."
 
 rules:
+  - "NEVER start implementing without explicit user approval — ask and wait for confirmation"
   - "NEVER skip fitness function tasks in core zone"
   - "ALWAYS mark completed tasks as [X] in tasks.md"
   - "ALWAYS run fitness functions after core entity implementation"
   - "Report progress after every phase"
   - "If tasks.md doesn't exist, do NOT improvise — instruct user to run the Tasks workflow"
   - "For core zone, treat failing fitness functions as blocking errors"
+  - "The user may approve one phase at a time — do NOT assume blanket approval for all phases"
