@@ -18,13 +18,18 @@
 - [ ] T006 [Core] SKILL.md body: title, context (brief), when_to_use, steps (compact), rules, reference link to `references/context.md`
 - [ ] T007 [Core] Skills-MCP explicit references: each step that uses an MCP tool MUST reference it as `evospec:tool_name` (fully-qualified) in the step instructions
 
-## Phase 3: MCP Resource Trimming
+## Phase 3: MCP Resource Trimming + Deprecation Aliases
 
-- [ ] T008 [Core] Replace `evospec://config` resource with `evospec://project` in `src/evospec/mcp/server.py` — expose only project name, description, and zone defaults
-- [ ] T009 [Core] Convert `evospec://entities` resource to `get_entities(context?, upstream?)` MCP tool in `src/evospec/mcp/server.py` — add optional filters by bounded context and upstream name
-- [ ] T010 [Core] Convert `evospec://invariants` resource to `get_invariants(context?)` MCP tool in `src/evospec/mcp/server.py` — add optional filter by bounded context
+- [ ] T008 [Core] Add `evospec://project` resource in `src/evospec/mcp/server.py` — expose only project name, description, and zone defaults
+- [ ] T009 [Core] Convert `evospec://entities` resource handler to use new `get_entities(context?, upstream?)` tool logic — add optional filters by bounded context and upstream name
+- [ ] T010 [Core] Convert `evospec://invariants` resource handler to use new `get_invariants(context?)` tool logic — add optional filter by bounded context
 - [ ] T011 [Core] Keep `evospec://glossary` and `evospec://context-map` resources unchanged
 - [ ] T012 [Core] Remove MCP prompts `discover_feature` and `domain_contract` from `src/evospec/mcp/server.py` — replaced by Skills
+- [ ] T012a [Core] **Deprecation alias**: Keep `evospec://config` resource — return same data as `evospec://project` + `"_deprecated": "Use evospec://project instead"` field
+- [ ] T012b [Core] **Deprecation alias**: Keep `evospec://entities` resource — delegate to `get_entities()` internally + prepend deprecation notice in output
+- [ ] T012c [Core] **Deprecation alias**: Keep `evospec://invariants` resource — delegate to `get_invariants()` internally + prepend deprecation notice in output
+- [ ] T012d [Core] **Schema version gate**: In `check.py`, read `schema.version` from `evospec.yaml` — if version is newer than known, emit warning (not error). If missing, default to `"1.0.0"`
+- [ ] T012e [Core] **Schema backwards compat**: Verify no new `required` entries added to spec.schema.json `required` array or `allOf` conditional `required` arrays
 
 ## Phase 4: New MCP Tools (Cross-System)
 
@@ -66,6 +71,9 @@
 - [ ] T036 [Guardrails] Add test for `get_invariants(context?)` tool — verify filtering works
 - [ ] T037 [Guardrails] Add test for `get_upstream_apis()` tool — verify it reads upstream traceability
 - [ ] T038 [Guardrails] Add test for `parse_contract_file()` — verify OpenAPI, JSON Schema, and JSON example parsing
+- [ ] T038a [Guardrails] Add test: deprecated MCP resources (`evospec://config`, `evospec://entities`, `evospec://invariants`) return data + deprecation notice, not errors
+- [ ] T038b [Guardrails] Add test: spec created with EvoSpec v1.0.0 (no new fields) passes `evospec check` without errors on new version
+- [ ] T038c [Guardrails] Add test: spec.schema.json has no new entries in top-level `required` or `allOf` conditional `required`
 - [ ] T039 [Guardrails] Run `evospec check` to validate all specs
 
 ## Phase 9: Polish
@@ -88,6 +96,8 @@
 | AGT-INV-007: get_entities/get_invariants support context filtering | T009, T010, T035, T036 |
 | AGT-INV-008: get_upstream_apis returns only upstream data | T013, T037 |
 | AGT-INV-009: parse_contract_file validates file and format | T018, T038 |
+| AGT-INV-010: New schema fields MUST be optional (no new required) | T012e, T038c |
+| AGT-INV-011: Deprecated MCP resources return data + deprecation notice | T012a, T012b, T012c, T038a |
 
 ---
 
@@ -114,9 +124,9 @@ Within phases:
 
 ## Summary
 
-- **Total tasks**: 41
+- **Total tasks**: 49
 - **Phases**: 9
 - **Parallel opportunities**: 6 parallel groups across phases
-- **Invariant coverage**: 9/9 (100%)
-- **Suggested MVP**: Phases 1-5 (Skills emitter + MCP trimming + new tools + context update)
-- **Estimated effort**: ~4 implementation sessions
+- **Invariant coverage**: 11/11 (100%)
+- **Suggested MVP**: Phases 1-5 (Skills emitter + MCP trimming + deprecation aliases + new tools + context update)
+- **Estimated effort**: ~4-5 implementation sessions

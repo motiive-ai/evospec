@@ -91,6 +91,8 @@ User → Skills (/evospec-discover): workflow guides agent through the above seq
 | AGT-INV-007: get_entities/get_invariants filter by context | Optional params in tool signature | TBD | TBD |
 | AGT-INV-008: get_upstream_apis returns only upstream data | Reads only from `_upstreams` config | TBD | TBD |
 | AGT-INV-009: parse_contract_file validates file/format | Validation before parsing | TBD | TBD |
+| AGT-INV-010: new schema fields MUST be optional | No new `required` entries in spec.schema.json | TBD | TBD |
+| AGT-INV-011: deprecated MCP resources return data + notice | Aliases delegate to new tools | TBD | TBD |
 
 ---
 

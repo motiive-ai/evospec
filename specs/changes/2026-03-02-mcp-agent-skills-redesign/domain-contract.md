@@ -78,6 +78,8 @@
 | AGT-INV-007 | `get_entities()` and `get_invariants()` tools MUST support filtering by bounded context | test | `tests/test_mcp.py` |
 | AGT-INV-008 | `get_upstream_apis()` MUST return only data from upstream services' published traceability, never local project internals | test | `tests/test_mcp.py` |
 | AGT-INV-009 | `parse_contract_file()` MUST validate file exists and is a supported format before parsing | test | `tests/test_mcp.py` |
+| AGT-INV-010 | New fields in spec.schema.json MUST be optional — no new entries in `required` arrays — so specs created with older EvoSpec versions pass validation | test | `tests/test_check.py` |
+| AGT-INV-011 | Deprecated MCP resources (`evospec://config`, `evospec://entities`, `evospec://invariants`) MUST return data (not errors) with a deprecation notice until next major version | test | `tests/test_mcp.py` |
 
 ---
 

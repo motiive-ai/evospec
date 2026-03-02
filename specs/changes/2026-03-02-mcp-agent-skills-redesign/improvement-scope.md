@@ -12,6 +12,7 @@ EvoSpec currently generates 22 platform-specific files across 3 AI platforms (Wi
 2. Trims the MCP surface to expose only domain context that agents actually need
 3. Adds new MCP tools for cross-system use cases (upstream API discovery, contract file parsing)
 4. Makes Skills explicitly reference MCP tools so agents know what to call
+5. Preserves backwards compatibility so specs created with older EvoSpec versions keep working
 
 ### Two Personas
 
@@ -47,6 +48,9 @@ The **external persona** is currently underserved. They can check invariant impa
 - **_context.yaml update**: Add `skills` section documenting the new format; update `mcp` section to reflect trimmed resources and new tools
 - **Example update**: Revise `examples/multi-system-ux-discovery/README.md` and `WALKTHROUGH.md` to demonstrate both personas using MCP tools + Skills
 - **CLI update**: Add `skills` to `--platform` choices in `evospec generate agents`
+- **Backwards compatibility — MCP deprecation aliases**: Keep `evospec://config`, `evospec://entities`, and `evospec://invariants` as deprecated resources that return data + deprecation warning. Remove in next major version.
+- **Backwards compatibility — schema version gate**: Make `check.py` and `server.py` read `schema.version` from `evospec.yaml` and tolerate missing fields from older spec versions (already mostly works via `.get()` defaults, but should be explicit)
+- **Backwards compatibility — new fields in spec.yaml**: New fields added to spec.schema.json MUST be optional (no new `required` entries) so old specs pass validation
 - **Test coverage**: Ensure existing tests pass with the new emitter and MCP changes
 
 ### Out of Scope
@@ -90,7 +94,9 @@ No invariant conflicts detected. This change does not touch persistence, auth, b
 
 ### MCP Resources
 - [ ] `evospec://project` resource returns lean project metadata (no teams, strategy, reverse config)
-- [ ] `evospec://config` resource is removed
+- [ ] `evospec://config` resource kept as deprecated alias → returns same data as `evospec://project` + deprecation notice
+- [ ] `evospec://entities` resource kept as deprecated alias → calls `get_entities()` tool internally + deprecation notice
+- [ ] `evospec://invariants` resource kept as deprecated alias → calls `get_invariants()` tool internally + deprecation notice
 - [ ] `evospec://glossary` and `evospec://context-map` resources unchanged
 
 ### MCP Tools (existing, moved)
@@ -105,9 +111,15 @@ No invariant conflicts detected. This change does not touch persistence, auth, b
 - [ ] `_context.yaml` documents Skills format, updated MCP surface, and new tools
 - [ ] `examples/multi-system-ux-discovery/` clearly shows both personas (internal dev + external designer) using MCP + Skills
 
+### Backwards Compatibility
+- [ ] Specs created with EvoSpec v1.0.0 pass `evospec check` on new version without errors
+- [ ] No new `required` fields added to spec.schema.json
+- [ ] Deprecated MCP resources return data (not errors) with deprecation warnings
+- [ ] `schema.version` in `evospec.yaml` is read by `check.py` — unknown future versions produce a warning, not an error
+
 ### Quality
 - [ ] All existing tests pass
-- [ ] New tests cover Skills emitter, new MCP tools, and contract file parsing
+- [ ] New tests cover Skills emitter, new MCP tools, contract file parsing, and deprecation aliases
 
 ## Risks & Rollback
 
@@ -115,7 +127,13 @@ No invariant conflicts detected. This change does not touch persistence, auth, b
 
 **Rollback plan**: Revert the branch. Existing platform-specific emitters are unchanged, so users who don't use Skills see no difference.
 
-**Reversibility**: moderate — Skills files are additive (new directory). MCP resource removal could break MCP clients that read `evospec://config` or `evospec://entities` as resources, but these are internal and undocumented to external users.
+**Reversibility**: moderate — Skills files are additive (new directory). MCP resource changes are backwards-compatible via deprecation aliases (old URIs still work, just with deprecation warnings).
+
+**Backwards compatibility strategy**:
+- **Spec artifacts**: All readers use `.get()` with defaults. New fields are optional in the schema. Old specs work on new EvoSpec. New specs work on old EvoSpec (unknown fields are silently ignored by YAML).
+- **MCP resources**: Deprecated URIs (`evospec://config`, `evospec://entities`, `evospec://invariants`) kept as aliases during this version. Removed in next major.
+- **MCP tools**: New tools are additive. Old MCP servers simply don't have them — agents get "tool not found" which is the expected MCP behavior for unsupported capabilities.
+- **Skills**: Additive. Old EvoSpec doesn't generate them; new EvoSpec generates them alongside legacy platform files.
 
 ## ADRs
 
