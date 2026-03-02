@@ -5,7 +5,7 @@ id: "evospec-core-domain"
 title: "evospec-core-domain"
 zone: "core"  # edge | hybrid | core
 change_type: "improvement"  # experiment | improvement | bugfix
-status: "draft"     # draft | proposed | accepted | in-progress | completed | abandoned | superseded
+status: "completed" # draft | proposed | accepted | in-progress | completed | abandoned | superseded
 created_at: "2026-03-01"
 updated_at: "2026-03-01"
 
@@ -32,9 +32,18 @@ invariant_impact:
     #   impact: "breaks"       # breaks | relaxes | tightens | neutral
     #   resolution: ""         # exempt | evolve | shadow | redesign
     #   notes: ""
-  entities_touched: []         # List of domain entities this change affects
-  contexts_touched: []         # List of bounded contexts this change crosses
-  reviewed: false              # Must be true before moving to in-progress
+  entities_touched:
+    - "ChangeSpec"
+    - "Invariant"
+    - "FitnessFunction"
+    - "DomainEntity"
+    - "BoundedContext"
+    - "Feature"
+    - "ProjectConfig"
+  contexts_touched:
+    - "spec-engine"
+    - "domain-management"
+  reviewed: true
 
 # --- Domain (required for core, optional for hybrid) ---
 bounded_context: "Spec Engine"
@@ -80,7 +89,7 @@ invariants:
     fitness_function: "tests/fitness/test_spec_invariants.py"
   - id: "INV-007"
     statement: "spec.yaml MUST validate against the JSON Schema"
-    enforcement: "schema"
+    enforcement: "schema-validation"
     fitness_function: "tests/fitness/test_spec_schema.py"
   - id: "INV-008"
     statement: "evospec.yaml MUST exist at the project root before any command other than init runs"
@@ -125,8 +134,11 @@ traceability:
     - "evospec.core.adr"
     - "evospec.core.render"
     - "evospec.core.status"
+    - "evospec.core.agents"
     - "evospec.reverse.api"
     - "evospec.reverse.db"
+    - "evospec.reverse.cli"
+    - "evospec.reverse.deps"
     - "evospec.mcp.server"
   events: []
   migrations: []
