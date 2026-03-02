@@ -141,6 +141,107 @@ Equivalent to Windsurf `/evospec.adr`.
 - Always include reversibility assessment
 - If the decision is about a core zone change, flag that fitness functions may be needed
 
+## Procedure: Capture
+
+Equivalent to Windsurf `/evospec.capture`.
+
+1. **Find the spec directory and codebase**:
+   - Check `evospec.yaml` exists. If not: instruct user to run `evospec init`.
+   - If user specifies a spec path, use it. Otherwise list available specs.
+   - Read `spec.yaml` to understand the zone, classification, and traceability.
+   - If `spec.yaml` doesn't exist yet (user built without specs), create one:
+     - Ask the user to describe what they built in 1-2 sentences
+     - Auto-classify the zone (edge/hybrid/core)
+
+2. **Scan the implementation**:
+   Use `spec.yaml → traceability.modules` to find the code. If traceability is empty,
+   ask the user which directories/files contain the implementation.
+   
+   **Scan for**:
+   - **Components/Modules**: file structure, exports, responsibilities
+   - **API calls**: HTTP clients, fetch calls, service URLs, endpoints consumed
+   - **State management**: useState, Redux stores, database models, caches
+   - **Configuration**: env vars, feature flags, config files
+   - **Tests**: test files, coverage, test frameworks
+   - **Dependencies**: package.json, requirements.txt, pom.xml, go.mod
+   
+   Build a mental model of the implementation before writing anything.
+
+3. **Generate implementation-spec.md**:
+   Use the `implementation-spec.md` template. Fill in every section from the code scan:
+   
+   - **§1 Overview**: tech stack, architecture style, key decisions (infer from code)
+   - **§2 Component Architecture**: module tree, responsibilities, file paths (from scan)
+   - **§3 API Integration**: endpoints, auth, error handling (from HTTP client code)
+   - **§4 State Management**: state shape, transitions (from state code)
+   - **§5 Configuration**: env vars, feature flags (from config/env files)
+   - **§6 Error Handling**: error scenarios, fallbacks (from try/catch patterns)
+   - **§7 Testing Strategy**: test files found, coverage gaps
+   - **§8 Deployment**: build commands (from package.json/Makefile), deploy target
+   - **§9 Invariant Compliance**: map spec.yaml invariants to code locations
+   - **§10 Reproduction Instructions**: setup, build, run, verify steps
+   - **§11 Known Limitations**: tech debt, TODOs found in code, missing error handling
+   - **§12 Changelog**: single entry "Captured retroactively from existing implementation"
+   
+   **Quality bar**: Someone reading this document should be able to understand, maintain,
+   or reproduce the implementation without reading the source code first.
+
+4. **Update domain artifacts**:
+   Based on the code scan, update domain files if the implementation reveals new information:
+   
+   **specs/domain/entities.yaml**:
+   - If the implementation introduces new entities not in the registry, suggest adding them
+   - Show the user: "I found these entities in your code that aren't in the registry: ..."
+   - Ask permission before modifying
+   
+   **specs/domain/contexts.yaml**:
+   - If the implementation touches bounded contexts not yet registered, suggest adding them
+   
+   **spec.yaml → traceability**:
+   - Update endpoints, tables, modules, events with actual values from the code scan
+
+5. **Gap analysis**:
+   Compare the implementation against the spec artifacts:
+   
+   **If discovery-spec.md exists**:
+   - Are all assumptions addressed in the implementation?
+   - Are kill criteria measurable with the current instrumentation?
+   - Are invariant conflict resolutions actually implemented?
+   
+   **If domain-contract.md exists**:
+   - Are all invariants enforced in code? (fill §9 of implementation-spec.md)
+   - Are all state machine transitions implemented?
+   - Are fitness functions written?
+   
+   **If neither exists** (greenfield capture):
+   - Suggest which spec artifacts should be created
+   - Offer to run `/evospec.discover` to create discovery-spec.md retroactively
+   
+   Report gaps clearly:
+   ```
+   ⚠ Gap Analysis:
+   - INV-001: enforced ✓ (src/guards/order.ts:42)
+   - INV-002: NOT enforced ✗ — no code found that validates this
+   - Assumption A001: no metrics instrumented to test this
+   ```
+
+6. **Report**:
+   - List all files created or updated
+   - Show implementation coverage (% of spec covered by code)
+   - Show invariant compliance (% of invariants enforced)
+   - Show domain registry updates (new entities/contexts added)
+   - Suggest next steps:
+     - If gaps found: "Fix the gaps, then run `/evospec.check` to validate"
+     - If experiment: "Record what you learned with `/evospec.learn`"
+     - If ready for production: "Run `/evospec.tasks` to plan remaining work"
+
+**Rules**: ALWAYS read the actual source code — do NOT ask the user to describe their implementation Generate ALL content — the user should not have to write docs manually Be honest about gaps — if invariants aren't enforced, say so clearly
+- Ask permission before modifying domain files (entities.yaml, contexts.yaml)
+- Do NOT modify the source code — this workflow only creates/updates spec artifacts
+- If no spec directory exists, create one and generate spec.yaml from the implementation
+- Include file:line references in invariant compliance mapping
+- The implementation-spec.md must be detailed enough for someone to reproduce the build
+
 ## Procedure: Check
 
 Equivalent to Windsurf `/evospec.check`.
@@ -391,12 +492,46 @@ Equivalent to Windsurf `/evospec.discover`.
    
    Let the user override if they disagree.
 
-3. **Generate spec.yaml**:
-   - Use the classification answers to populate the `spec.yaml` template
+3. **Explore and model the domain (interactive)**:
+   Before writing any spec files, help the user understand what they're building.
+   This step is **conversational** — ask questions, suggest structures, iterate.
+   
+   **Entity Modeling**:
+   - Ask: "What are the main things (entities) in your system?"
+   - Suggest entity names, fields, and relationships based on the user's description
+   - Show a simple entity diagram or table:
+     ```
+     Entity: Cart
+     Fields: items[], total, status
+     Relationships: Cart → Product (references), Cart → Order (creates)
+     ```
+   - Ask: "Does this look right? What's missing?"
+   - Check `specs/domain/entities.yaml` — if entities already exist, show them
+   - If upstream repos exist, show their entities too (helps UX teams understand backend domains)
+   
+   **Bounded Context Mapping**:
+   - Ask: "Which team/system owns this? Does it cross into other teams' territory?"
+   - If it touches entities from upstream repos, flag the boundary
+   - Show the context map if it exists (`specs/domain/context-map.md`)
+   
+   **Design Exploration**:
+   - Ask: "How confident are you about the solution? (1-10)"
+     - 1-3: "Let's explore more. Here are 3-4 different approaches..."
+     - 4-6: "You have a direction. Let's refine it and test assumptions."
+     - 7-10: "You seem confident. Consider `/evospec.improve` for a faster path."
+   - For each approach, briefly sketch: components needed, APIs consumed, state shape
+   - Help the user pick an approach or combine ideas
+   
+   **This step can loop** — the user may want to explore multiple times before committing.
+   When the user says something like "ok let's go with this" or "I'm ready", proceed to step 4.
+
+4. **Generate spec.yaml**:
+   - Use the classification answers and domain exploration to populate `spec.yaml`
    - Fill in: id, title, zone, status (draft), created_at, classification fields
    - For edge/hybrid: populate discovery section with outcome, opportunity, assumptions
+   - Include entities_touched and contexts_touched from the modeling conversation
 
-4. **Generate discovery-spec.md**:
+5. **Generate discovery-spec.md**:
    Follow the template structure. For each section, use the user's feature description + Design Thinking to generate content:
    
    **Section 1 — Strategic Fit** (Roger Martin):
@@ -438,7 +573,7 @@ Equivalent to Windsurf `/evospec.discover`.
    - List bounded contexts and entities this touches
    - If it touches core entities, flag that a domain-contract.md is needed
 
-5. **Check invariant impact** (CRITICAL):
+6. **Check invariant impact** (CRITICAL):
    Before proceeding, check which core invariants this change may conflict with.
    - Read all existing core/hybrid specs and collect their invariants.
    - Compare against the entities and bounded contexts this change touches (from Section 10).
@@ -465,25 +600,39 @@ Equivalent to Windsurf `/evospec.discover`.
    
    If **no conflicts**, display: `✓ No invariant conflicts — safe to experiment.`
 
-6. **Generate domain-contract.md (if hybrid/core)**:
+7. **Generate domain-contract.md (if hybrid/core)**:
    - For hybrid: only Sections 1 (Context), 3 (Entities), 4 (Invariants), 7 (Authorization)
    - For core: full domain-contract.md (recommend running `/evospec.contract` for thorough generation)
 
-7. **Report**:
+8. **Report**:
    - Print the created files and their paths
    - Show the zone classification and risk level
    - Show invariant impact summary (conflicts found or safe)
-   - Suggest next steps:
-     - If edge + safe: "Ready to prototype. Run `/evospec.tasks` when ready to implement."
-     - If edge + conflicts: "Resolve invariant conflicts first. Consider `/evospec.improve` if this is a known need."
-     - If hybrid: "Review the domain contract. Run `/evospec.contract` for a thorough contract."
-     - If core: "This needs a full domain contract. Run `/evospec.contract`."
+   - Suggest next steps based on user's confidence and zone:
+   
+     **Edge + experimental (user exploring)**:
+     - "Start building your prototype! When you're happy with what you've built, run `/evospec.capture` to formalize the implementation spec and domain artifacts."
+   
+     **Edge + confident (user knows what they want)**:
+     - "Ready to implement. Run `/evospec.tasks` to generate the task list, or `/evospec.improve` for a faster path."
+   
+     **Edge + invariant conflicts**:
+     - "Resolve invariant conflicts first. Consider `/evospec.improve` if this is a known need."
+   
+     **Hybrid**:
+     - "Review the domain contract. Run `/evospec.contract` for a thorough contract."
+   
+     **Core**:
+     - "This needs a full domain contract. Run `/evospec.contract`."
 
-**Rules**: YOU (the AI) generate ALL content — the user provides a short description, you produce the full spec Do NOT leave empty sections or placeholder comments. Make informed guesses for everything. NEVER include implementation details (languages, frameworks, APIs) in the discovery spec
+**Rules**: YOU (the AI) generate ALL content — the user provides a short description, you produce the full spec Do NOT leave empty sections or placeholder comments. Make informed guesses for everything. NEVER include implementation details (languages, frameworks, APIs) in the discovery spec — EXCEPT during entity modeling (step 3) where technical context helps the user think
 - Focus on WHAT users need and WHY, not HOW
 - Maximum 3 [NEEDS CLARIFICATION] markers — make informed guesses for everything else
 - Use the project's evospec.yaml strategy context if available
 - Keep it concise — one page per section is the target
+- The domain exploration step (step 3) is INTERACTIVE — ask questions, wait for answers, iterate
+- Read specs/domain/entities.yaml and upstream entities to help the user understand existing domain
+- Adapt the depth of exploration to the user's confidence level — don't over-specify for someone who just wants to experiment
 
 ## Procedure: Fix
 
@@ -641,12 +790,15 @@ Equivalent to Windsurf `/evospec.implement`.
      ```
    - If a task fails: report the error, suggest fix, ask user how to proceed
    
-   **Update implementation-spec.md after each phase**:
+   **If implementation-spec.md exists**, update it after each phase:
    - §2 Component Architecture: add new components/modules created in this phase
    - §3 API Integration: update endpoints used, error handling decisions
    - §4 State Management: update state shape if it changed
    - §9 Invariant Compliance: fill in File:Line references for enforced invariants
    - §12 Changelog: add entry for the completed phase
+   
+   **If implementation-spec.md does NOT exist**, skip this — the user can create it
+   later via `/evospec.capture` when they're ready to formalize.
 
 6. **Post-implementation**:
    - Update `spec.yaml` traceability with actual file paths created
@@ -654,7 +806,7 @@ Equivalent to Windsurf `/evospec.implement`.
    - If core zone: verify all fitness functions pass
    - Suggest running the Check workflow for full validation
    
-   **Finalize implementation-spec.md**:
+   **If implementation-spec.md exists**, finalize it:
    - §1 Overview: verify tech stack table is complete, update status
    - §5 Configuration: fill in all env vars and feature flags used
    - §6 Error Handling: document all error scenarios discovered during implementation
@@ -663,9 +815,10 @@ Equivalent to Windsurf `/evospec.implement`.
    - §10 Reproduction Instructions: verify setup/build/run/verify steps work
    - §11 Known Limitations: document any tech debt or gaps
    - §12 Changelog: add final entry
+   The implementation-spec.md should now be a **complete as-built blueprint**.
    
-   The implementation-spec.md should now be a **complete as-built blueprint** —
-   someone reading it can understand, maintain, or reproduce the implementation.
+   **If implementation-spec.md does NOT exist**, suggest:
+   - "Run `/evospec.capture` to create an implementation spec from what was just built."
 
 7. **Report**:
    - Summary of completed tasks
@@ -976,7 +1129,12 @@ Equivalent to Windsurf `/evospec.tasks`.
    - Suggested MVP scope
    - Estimated implementation phases
 
-8. **Create implementation-spec.md skeleton**:
+8. **Create implementation-spec.md skeleton (deliberate mode only)**:
+   **Skip this step for edge/experimental specs** — those should use `/evospec.capture`
+   after prototyping to formalize retroactively. Don't force documentation before the
+   user is ready.
+   
+   **For core/hybrid specs or when the user is deliberate** (knows what they want):
    Create `implementation-spec.md` in the spec directory with:
    - Overview section: filled from spec.yaml (zone, tech stack from evospec.yaml)
    - Component Architecture: empty table, ready to fill during implementation
@@ -990,6 +1148,8 @@ Equivalent to Windsurf `/evospec.tasks`.
    Use the `implementation-spec.md` template from `specs/_templates/`.
    
    This document will be updated incrementally during `/evospec.implement`.
+   
+   **For edge specs**: mention that `/evospec.capture` is available after prototyping.
 
 **Rules**: NEVER generate tasks without reading the spec artifacts first Core zone: fitness function tasks BEFORE implementation tasks (TDD) Edge zone: prototype tasks BEFORE instrumentation tasks
 - Every invariant must map to at least one task

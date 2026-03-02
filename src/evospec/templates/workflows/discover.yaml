@@ -4,7 +4,7 @@
 id: "discover"
 name: "Discover"
 slash_command: "evospec.discover"
-description: "Create or update a Discovery Spec from a natural language feature description. Uses Design Thinking + Continuous Discovery to explore the Mystery → Heuristic stage."
+description: "Create or update a Discovery Spec from a natural language feature description. Uses Design Thinking + Continuous Discovery to explore the Mystery → Heuristic stage. Helps model entities, explore design options, and iterate."
 
 handoffs:
   - label: "Create Domain Contract"
@@ -13,6 +13,9 @@ handoffs:
   - label: "Generate Tasks"
     workflow: "tasks"
     prompt: "Generate implementation tasks from the spec"
+  - label: "Capture Implementation"
+    workflow: "capture"
+    prompt: "Formalize what was built into an implementation spec"
 
 context: |
   This workflow operates in the **Discovery Layer** of EvoSpec. The Discovery Layer is where:
@@ -21,6 +24,17 @@ context: |
   - We use **Continuous Discovery** (Teresa Torres) to structure learning
   - Specs are hypotheses, not contracts
   - The goal is **learning**, not shipping
+
+  **This workflow is interactive and iterative.** The user may:
+  - Start with a vague idea and need help modeling entities and domains
+  - Want to explore design options before committing to an approach
+  - Iterate multiple times — refining the spec as they learn
+  - Build a prototype during discovery, then formalize later via `/evospec.capture`
+
+  **Do NOT force the user through a rigid pipeline.** Adapt to their confidence level:
+  - Low confidence → spend more time on empathy, ideation, entity modeling
+  - Medium confidence → focus on assumptions and experiment design
+  - High confidence → fast-track to tasks or suggest `/evospec.improve` instead
 
 steps:
   - id: 1
@@ -51,13 +65,50 @@ steps:
       Let the user override if they disagree.
 
   - id: 3
-    title: "Generate spec.yaml"
+    title: "Explore and model the domain (interactive)"
+    interactive: true
     instructions: |
-      - Use the classification answers to populate the `spec.yaml` template
-      - Fill in: id, title, zone, status (draft), created_at, classification fields
-      - For edge/hybrid: populate discovery section with outcome, opportunity, assumptions
+      Before writing any spec files, help the user understand what they're building.
+      This step is **conversational** — ask questions, suggest structures, iterate.
+
+      **Entity Modeling**:
+      - Ask: "What are the main things (entities) in your system?"
+      - Suggest entity names, fields, and relationships based on the user's description
+      - Show a simple entity diagram or table:
+        ```
+        Entity: Cart
+        Fields: items[], total, status
+        Relationships: Cart → Product (references), Cart → Order (creates)
+        ```
+      - Ask: "Does this look right? What's missing?"
+      - Check `specs/domain/entities.yaml` — if entities already exist, show them
+      - If upstream repos exist, show their entities too (helps UX teams understand backend domains)
+
+      **Bounded Context Mapping**:
+      - Ask: "Which team/system owns this? Does it cross into other teams' territory?"
+      - If it touches entities from upstream repos, flag the boundary
+      - Show the context map if it exists (`specs/domain/context-map.md`)
+
+      **Design Exploration**:
+      - Ask: "How confident are you about the solution? (1-10)"
+        - 1-3: "Let's explore more. Here are 3-4 different approaches..."
+        - 4-6: "You have a direction. Let's refine it and test assumptions."
+        - 7-10: "You seem confident. Consider `/evospec.improve` for a faster path."
+      - For each approach, briefly sketch: components needed, APIs consumed, state shape
+      - Help the user pick an approach or combine ideas
+
+      **This step can loop** — the user may want to explore multiple times before committing.
+      When the user says something like "ok let's go with this" or "I'm ready", proceed to step 4.
 
   - id: 4
+    title: "Generate spec.yaml"
+    instructions: |
+      - Use the classification answers and domain exploration to populate `spec.yaml`
+      - Fill in: id, title, zone, status (draft), created_at, classification fields
+      - For edge/hybrid: populate discovery section with outcome, opportunity, assumptions
+      - Include entities_touched and contexts_touched from the modeling conversation
+
+  - id: 5
     title: "Generate discovery-spec.md"
     condition: "edge or hybrid zone"
     instructions: |
@@ -102,7 +153,7 @@ steps:
       - List bounded contexts and entities this touches
       - If it touches core entities, flag that a domain-contract.md is needed
 
-  - id: 5
+  - id: 6
     title: "Check invariant impact"
     critical: true
     instructions: |
@@ -132,24 +183,35 @@ steps:
 
       If **no conflicts**, display: `✓ No invariant conflicts — safe to experiment.`
 
-  - id: 6
+  - id: 7
     title: "Generate domain-contract.md (if hybrid/core)"
     condition: "hybrid or core zone"
     instructions: |
       - For hybrid: only Sections 1 (Context), 3 (Entities), 4 (Invariants), 7 (Authorization)
       - For core: full domain-contract.md (recommend running `/evospec.contract` for thorough generation)
 
-  - id: 7
+  - id: 8
     title: "Report"
     instructions: |
       - Print the created files and their paths
       - Show the zone classification and risk level
       - Show invariant impact summary (conflicts found or safe)
-      - Suggest next steps:
-        - If edge + safe: "Ready to prototype. Run `/evospec.tasks` when ready to implement."
-        - If edge + conflicts: "Resolve invariant conflicts first. Consider `/evospec.improve` if this is a known need."
-        - If hybrid: "Review the domain contract. Run `/evospec.contract` for a thorough contract."
-        - If core: "This needs a full domain contract. Run `/evospec.contract`."
+      - Suggest next steps based on user's confidence and zone:
+
+        **Edge + experimental (user exploring)**:
+        - "Start building your prototype! When you're happy with what you've built, run `/evospec.capture` to formalize the implementation spec and domain artifacts."
+
+        **Edge + confident (user knows what they want)**:
+        - "Ready to implement. Run `/evospec.tasks` to generate the task list, or `/evospec.improve` for a faster path."
+
+        **Edge + invariant conflicts**:
+        - "Resolve invariant conflicts first. Consider `/evospec.improve` if this is a known need."
+
+        **Hybrid**:
+        - "Review the domain contract. Run `/evospec.contract` for a thorough contract."
+
+        **Core**:
+        - "This needs a full domain contract. Run `/evospec.contract`."
 
 knowledge_funnel_guidance: |
   When generating the discovery spec, position the feature on the Knowledge Funnel:
@@ -160,8 +222,11 @@ knowledge_funnel_guidance: |
 rules:
   - "YOU (the AI) generate ALL content — the user provides a short description, you produce the full spec"
   - "Do NOT leave empty sections or placeholder comments. Make informed guesses for everything."
-  - "NEVER include implementation details (languages, frameworks, APIs) in the discovery spec"
+  - "NEVER include implementation details (languages, frameworks, APIs) in the discovery spec — EXCEPT during entity modeling (step 3) where technical context helps the user think"
   - "Focus on WHAT users need and WHY, not HOW"
   - "Maximum 3 [NEEDS CLARIFICATION] markers — make informed guesses for everything else"
   - "Use the project's evospec.yaml strategy context if available"
   - "Keep it concise — one page per section is the target"
+  - "The domain exploration step (step 3) is INTERACTIVE — ask questions, wait for answers, iterate"
+  - "Read specs/domain/entities.yaml and upstream entities to help the user understand existing domain"
+  - "Adapt the depth of exploration to the user's confidence level — don't over-specify for someone who just wants to experiment"

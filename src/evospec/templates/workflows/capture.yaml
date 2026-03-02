@@ -1,0 +1,142 @@
+# Canonical Workflow: Capture (retroactive formalization)
+# Platform-agnostic definition. Generator emits Windsurf, Claude, Cursor formats.
+
+id: "capture"
+name: "Capture"
+slash_command: "evospec.capture"
+description: "Formalize what was built into an implementation spec + domain artifacts. Use after experimental work, prototyping, or any implementation you want to document retroactively."
+
+handoffs:
+  - label: "Run Checks"
+    workflow: "check"
+    prompt: "Validate spec and run fitness function checks"
+  - label: "Record Learnings"
+    workflow: "learn"
+    prompt: "Record what was learned from this experiment"
+
+context: |
+  This workflow **formalizes work that already happened**. It's the complement to `/evospec.discover`:
+  - `/evospec.discover` helps you explore and start building
+  - `/evospec.capture` documents what you built so it can be reproduced, maintained, or handed off
+
+  **Two main use cases**:
+  1. **Post-experiment capture**: UX/product built a prototype during discovery. Now they want to
+     document what exists — components, API integrations, state management, known gaps.
+  2. **Retroactive documentation**: Developer built something without formal specs. Now they want
+     to create the implementation spec, entity definitions, and invariant mappings.
+
+  This workflow reads the actual codebase to generate documentation — it's not asking the user
+  to write docs manually. The AI scans the code and produces the spec.
+
+steps:
+  - id: 1
+    title: "Find the spec directory and codebase"
+    instructions: |
+      - Check `evospec.yaml` exists. If not: instruct user to run `evospec init`.
+      - If user specifies a spec path, use it. Otherwise list available specs.
+      - Read `spec.yaml` to understand the zone, classification, and traceability.
+      - If `spec.yaml` doesn't exist yet (user built without specs), create one:
+        - Ask the user to describe what they built in 1-2 sentences
+        - Auto-classify the zone (edge/hybrid/core)
+
+  - id: 2
+    title: "Scan the implementation"
+    instructions: |
+      Use `spec.yaml → traceability.modules` to find the code. If traceability is empty,
+      ask the user which directories/files contain the implementation.
+
+      **Scan for**:
+      - **Components/Modules**: file structure, exports, responsibilities
+      - **API calls**: HTTP clients, fetch calls, service URLs, endpoints consumed
+      - **State management**: useState, Redux stores, database models, caches
+      - **Configuration**: env vars, feature flags, config files
+      - **Tests**: test files, coverage, test frameworks
+      - **Dependencies**: package.json, requirements.txt, pom.xml, go.mod
+
+      Build a mental model of the implementation before writing anything.
+
+  - id: 3
+    title: "Generate implementation-spec.md"
+    instructions: |
+      Use the `implementation-spec.md` template. Fill in every section from the code scan:
+
+      - **§1 Overview**: tech stack, architecture style, key decisions (infer from code)
+      - **§2 Component Architecture**: module tree, responsibilities, file paths (from scan)
+      - **§3 API Integration**: endpoints, auth, error handling (from HTTP client code)
+      - **§4 State Management**: state shape, transitions (from state code)
+      - **§5 Configuration**: env vars, feature flags (from config/env files)
+      - **§6 Error Handling**: error scenarios, fallbacks (from try/catch patterns)
+      - **§7 Testing Strategy**: test files found, coverage gaps
+      - **§8 Deployment**: build commands (from package.json/Makefile), deploy target
+      - **§9 Invariant Compliance**: map spec.yaml invariants to code locations
+      - **§10 Reproduction Instructions**: setup, build, run, verify steps
+      - **§11 Known Limitations**: tech debt, TODOs found in code, missing error handling
+      - **§12 Changelog**: single entry "Captured retroactively from existing implementation"
+
+      **Quality bar**: Someone reading this document should be able to understand, maintain,
+      or reproduce the implementation without reading the source code first.
+
+  - id: 4
+    title: "Update domain artifacts"
+    instructions: |
+      Based on the code scan, update domain files if the implementation reveals new information:
+
+      **specs/domain/entities.yaml**:
+      - If the implementation introduces new entities not in the registry, suggest adding them
+      - Show the user: "I found these entities in your code that aren't in the registry: ..."
+      - Ask permission before modifying
+
+      **specs/domain/contexts.yaml**:
+      - If the implementation touches bounded contexts not yet registered, suggest adding them
+
+      **spec.yaml → traceability**:
+      - Update endpoints, tables, modules, events with actual values from the code scan
+
+  - id: 5
+    title: "Gap analysis"
+    instructions: |
+      Compare the implementation against the spec artifacts:
+
+      **If discovery-spec.md exists**:
+      - Are all assumptions addressed in the implementation?
+      - Are kill criteria measurable with the current instrumentation?
+      - Are invariant conflict resolutions actually implemented?
+
+      **If domain-contract.md exists**:
+      - Are all invariants enforced in code? (fill §9 of implementation-spec.md)
+      - Are all state machine transitions implemented?
+      - Are fitness functions written?
+
+      **If neither exists** (greenfield capture):
+      - Suggest which spec artifacts should be created
+      - Offer to run `/evospec.discover` to create discovery-spec.md retroactively
+
+      Report gaps clearly:
+      ```
+      ⚠ Gap Analysis:
+      - INV-001: enforced ✓ (src/guards/order.ts:42)
+      - INV-002: NOT enforced ✗ — no code found that validates this
+      - Assumption A001: no metrics instrumented to test this
+      ```
+
+  - id: 6
+    title: "Report"
+    instructions: |
+      - List all files created or updated
+      - Show implementation coverage (% of spec covered by code)
+      - Show invariant compliance (% of invariants enforced)
+      - Show domain registry updates (new entities/contexts added)
+      - Suggest next steps:
+        - If gaps found: "Fix the gaps, then run `/evospec.check` to validate"
+        - If experiment: "Record what you learned with `/evospec.learn`"
+        - If ready for production: "Run `/evospec.tasks` to plan remaining work"
+
+rules:
+  - "ALWAYS read the actual source code — do NOT ask the user to describe their implementation"
+  - "Generate ALL content — the user should not have to write docs manually"
+  - "Be honest about gaps — if invariants aren't enforced, say so clearly"
+  - "Ask permission before modifying domain files (entities.yaml, contexts.yaml)"
+  - "Do NOT modify the source code — this workflow only creates/updates spec artifacts"
+  - "If no spec directory exists, create one and generate spec.yaml from the implementation"
+  - "Include file:line references in invariant compliance mapping"
+  - "The implementation-spec.md must be detailed enough for someone to reproduce the build"

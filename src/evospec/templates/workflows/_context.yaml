@@ -150,6 +150,24 @@ cli_commands:
   - "evospec serve                            # Start MCP server"
   - "evospec generate agents                  # Generate AI agent integration files"
 
+workflow_modes:
+  experimental: |
+    For UX/product/experimental work (edge zone):
+      /evospec.discover → interactive exploration, entity modeling, design thinking
+      → user builds prototype (with AI help, outside EvoSpec)
+      → /evospec.capture → retroactive formalization into implementation-spec.md + domain artifacts
+      → /evospec.learn → record experiment results
+    Key principle: never force documentation before the user is ready.
+
+  deliberate: |
+    For developers/known changes (core/hybrid, or confident edge):
+      /evospec.improve or /evospec.discover → spec artifacts
+      → /evospec.contract → domain contract (core/hybrid)
+      → /evospec.tasks → task list + implementation-spec.md skeleton
+      → /evospec.implement → execute tasks, update implementation-spec.md
+      → /evospec.check → validate
+    Key principle: documentation grows with the implementation.
+
 reverse_engineering:
   - "reverse api — scans source for REST endpoints (FastAPI, Django, Flask, Spring, Express, Next.js, NestJS, Hono, Fastify, Go frameworks)"
   - "reverse db — scans for DB models (SQLAlchemy, Django ORM, JPA/Hibernate, GORM, Prisma, TypeORM, Sequelize) + outputs entity registry YAML"

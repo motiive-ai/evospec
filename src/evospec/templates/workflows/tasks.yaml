@@ -118,8 +118,14 @@ steps:
       - Estimated implementation phases
 
   - id: 8
-    title: "Create implementation-spec.md skeleton"
+    title: "Create implementation-spec.md skeleton (deliberate mode only)"
+    condition: "core or hybrid zone, OR user explicitly requests it"
     instructions: |
+      **Skip this step for edge/experimental specs** — those should use `/evospec.capture`
+      after prototyping to formalize retroactively. Don't force documentation before the
+      user is ready.
+
+      **For core/hybrid specs or when the user is deliberate** (knows what they want):
       Create `implementation-spec.md` in the spec directory with:
       - Overview section: filled from spec.yaml (zone, tech stack from evospec.yaml)
       - Component Architecture: empty table, ready to fill during implementation
@@ -133,6 +139,8 @@ steps:
       Use the `implementation-spec.md` template from `specs/_templates/`.
 
       This document will be updated incrementally during `/evospec.implement`.
+
+      **For edge specs**: mention that `/evospec.capture` is available after prototyping.
 
 task_generation_from_contract: |
   | Contract Section | Generated Tasks |

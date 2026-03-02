@@ -110,7 +110,12 @@ Within phases: T001 → T003 (sequential), T002 || T004 (parallel)
 - Suggested MVP scope
 - Estimated implementation phases
 
-8. **Create implementation-spec.md skeleton**:
+8. **Create implementation-spec.md skeleton (deliberate mode only)**:
+**Skip this step for edge/experimental specs** — those should use `/evospec.capture`
+after prototyping to formalize retroactively. Don't force documentation before the
+user is ready.
+
+**For core/hybrid specs or when the user is deliberate** (knows what they want):
 Create `implementation-spec.md` in the spec directory with:
 - Overview section: filled from spec.yaml (zone, tech stack from evospec.yaml)
 - Component Architecture: empty table, ready to fill during implementation
@@ -124,6 +129,8 @@ Create `implementation-spec.md` in the spec directory with:
 Use the `implementation-spec.md` template from `specs/_templates/`.
 
 This document will be updated incrementally during `/evospec.implement`.
+
+**For edge specs**: mention that `/evospec.capture` is available after prototyping.
 
 ## Task Generation From Contract
 
