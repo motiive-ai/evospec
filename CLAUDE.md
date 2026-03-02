@@ -740,7 +740,7 @@ Equivalent to Windsurf `/evospec.implement`.
    - Read `implementation-spec.md` if it exists (skeleton from Tasks workflow)
    - Read `evospec.yaml` for project-level configuration
 
-3. **Pre-flight checks**:
+3. **Pre-flight checks and user approval**:
    - Count total tasks, completed tasks, remaining tasks
    - Identify current phase (first phase with incomplete tasks)
    - Check for blocking dependencies
@@ -752,6 +752,21 @@ Equivalent to Windsurf `/evospec.implement`.
    Current Phase: [phase name]
    Remaining: [count] tasks
    ```
+   
+   **CRITICAL: Ask for explicit user approval before executing any tasks.**
+   
+   ```
+   Ready to implement. I'll start with Phase [N]: [name] ([count] tasks).
+   Shall I proceed?
+   ```
+   
+   The user may:
+   - Approve the full plan → proceed phase by phase
+   - Approve one phase at a time → execute only the current phase, then ask again
+   - Adjust → go back to tasks.md and modify
+   - Skip phases → jump to a specific phase
+   
+   **Do NOT write any code until the user confirms.**
 
 4. **Execute tasks phase by phase**:
    For each phase (in order):
@@ -828,10 +843,12 @@ Equivalent to Windsurf `/evospec.implement`.
      - If all tasks done: "Run the Check workflow to validate"
      - If tasks remain: "Continue with the Implement workflow to resume"
 
-**Rules**: NEVER skip fitness function tasks in core zone ALWAYS mark completed tasks as [X] in tasks.md ALWAYS run fitness functions after core entity implementation
+**Rules**: NEVER start implementing without explicit user approval — ask and wait for confirmation NEVER skip fitness function tasks in core zone ALWAYS mark completed tasks as [X] in tasks.md
+- ALWAYS run fitness functions after core entity implementation
 - Report progress after every phase
 - If tasks.md doesn't exist, do NOT improvise — instruct user to run the Tasks workflow
 - For core zone, treat failing fitness functions as blocking errors
+- The user may approve one phase at a time — do NOT assume blanket approval for all phases
 
 ## Procedure: Improve
 
@@ -1121,13 +1138,33 @@ Equivalent to Windsurf `/evospec.tasks`.
    Within phases: T001 → T003 (sequential), T002 || T004 (parallel)
    ```
 
-7. **Report**:
+7. **Report and wait for user approval**:
+   Present the task plan summary:
    - Total task count
    - Tasks per phase
    - Parallel opportunities
    - Invariant coverage (% of invariants with tasks)
    - Suggested MVP scope
    - Estimated implementation phases
+   
+   **CRITICAL: STOP HERE.** Do NOT proceed to implementation.
+   The user MUST review the task plan and explicitly approve it before any code is written.
+   
+   Ask the user:
+   ```
+   The task plan is ready for review. Please check tasks.md and let me know:
+   1. Approve — proceed to implementation (`/evospec.implement`)
+   2. Adjust — tell me what to change (scope, order, add/remove tasks)
+   3. Split — break this into smaller PRs
+   ```
+   
+   Common iteration requests:
+   - "Too many tasks" → suggest MVP scope, defer rest to follow-up spec
+   - "Wrong order" → resequence phases
+   - "Missing X" → add tasks
+   - "Remove Y" → remove tasks and update dependency graph
+   
+   **Do NOT auto-start `/evospec.implement`.** The user will invoke it when ready.
 
 8. **Create implementation-spec.md skeleton (deliberate mode only)**:
    **Skip this step for edge/experimental specs** — those should use `/evospec.capture`
@@ -1156,6 +1193,8 @@ Equivalent to Windsurf `/evospec.tasks`.
 - Every task must have an exact file path
 - Tasks must be specific enough for an AI agent to execute without asking questions
 - Maximum 50 tasks per spec (break into sub-specs if larger)
+- NEVER start implementing after generating tasks — ALWAYS wait for explicit user approval
+- The task plan is a proposal, not a command — the user may iterate multiple times before approving
 
 ---
 
