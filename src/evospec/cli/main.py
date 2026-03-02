@@ -239,7 +239,7 @@ def generate() -> None:
 @generate.command("agents")
 @click.option(
     "--platform",
-    type=click.Choice(["windsurf", "claude", "cursor", "all"]),
+    type=click.Choice(["windsurf", "claude", "cursor", "skills", "all"]),
     default="all",
     help="Target platform (default: all).",
 )
@@ -247,7 +247,8 @@ def generate_agents_cmd(platform: str) -> None:
     """Generate AI agent integration files from canonical workflow specs.
 
     Reads platform-agnostic workflow YAMLs and emits platform-specific files:
-    Windsurf (.windsurf/workflows/), Claude Code (CLAUDE.md), Cursor (.cursor/rules/).
+    Windsurf (.windsurf/workflows/), Claude Code (CLAUDE.md), Cursor (.cursor/rules/),
+    Skills (.agents/skills/).
     """
     from pathlib import Path
 

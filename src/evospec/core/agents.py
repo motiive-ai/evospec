@@ -4,8 +4,10 @@ Reads platform-agnostic workflow YAMLs and emits platform-specific files:
 - Windsurf: .windsurf/workflows/evospec.*.md
 - Claude Code: CLAUDE.md
 - Cursor: .cursor/rules/evospec.mdc
+- Skills: .agents/skills/evospec-*/SKILL.md (Agent Skills open standard)
 """
 
+import re
 from pathlib import Path
 
 import yaml
@@ -15,7 +17,7 @@ console = Console()
 
 WORKFLOWS_DIR = Path(__file__).parent.parent / "templates" / "workflows"
 
-PLATFORMS = ("windsurf", "claude", "cursor")
+PLATFORMS = ("windsurf", "claude", "cursor", "skills")
 
 
 def _load_context() -> dict:
@@ -210,8 +212,8 @@ def _emit_claude(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
     for res in ctx["invariant_resolutions"]:
         lines.append(f"- **{res['id']}** — {res['description']}")
     lines.append("")
-    lines.append("MCP tool: `check_invariant_impact(entities=[...], contexts=[...], description=\"...\")`")
-    lines.append("MCP resource: `evospec://invariants` — all invariants from core/hybrid specs")
+    lines.append("MCP tool: `evospec:check_invariant_impact(entities=[...], contexts=[...], description=\"...\")`")
+    lines.append("MCP tool: `evospec:get_invariants(context?)` — all invariants from core/hybrid specs")
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -277,11 +279,11 @@ def _emit_claude(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
     lines.append("")
     lines.append(f"Each entity defines: {er['fields']}")
     lines.append("")
-    lines.append(f"- MCP resource: `{er['mcp_resource']}` — returns the full entity registry")
+    lines.append(f"- MCP tool: `{er['mcp_tool']}`")
     lines.append(f"- `{er['populate_command']}` generates copy-pasteable YAML for this section")
     lines.append(f"- {er['validation']}")
     lines.append("")
-    lines.append("When creating specs, always check `evospec://entities` to use canonical entity names.")
+    lines.append("When creating specs, call `evospec:get_entities()` to use canonical entity names.")
     lines.append("")
 
     # MCP
@@ -296,10 +298,6 @@ def _emit_claude(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
     lines.append("**Resources** (context):")
     for res in ctx["mcp"]["resources"]:
         lines.append(f"- `{res}`")
-    lines.append("")
-    lines.append("**Prompts** (templates):")
-    for p in ctx["mcp"]["prompts"]:
-        lines.append(f"- `{p}`")
     lines.append("")
 
     # CLI
@@ -426,7 +424,7 @@ def _emit_cursor(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
     er = ctx["entity_registry"]
     context_lines.append("## Entity Registry")
     context_lines.append("")
-    context_lines.append(f"Check `evospec://entities` for canonical entity names. {er['validation']}.")
+    context_lines.append(f"Call `evospec:get_entities()` for canonical entity names. {er['validation']}.")
     context_lines.append("")
 
     # MCP
@@ -502,6 +500,210 @@ def _emit_cursor(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
+# Skills emitter (Agent Skills open standard — agentskills.io)
+# ---------------------------------------------------------------------------
+
+# MCP tools exposed by the EvoSpec server — used for fully-qualified references
+_MCP_TOOLS = {
+    "list_specs", "read_spec", "check_spec", "classify_change",
+    "check_invariant_impact", "get_tasks", "update_task", "list_features",
+    "get_discovery_status", "record_experiment", "update_assumption",
+    "run_fitness_functions", "get_entities", "get_invariants",
+    "get_upstream_apis", "parse_contract_file",
+}
+
+
+def _add_mcp_tool_refs(text: str) -> str:
+    """Replace bare MCP tool names with fully-qualified evospec:tool_name references."""
+    result = text
+    for tool in sorted(_MCP_TOOLS, key=len, reverse=True):
+        # Replace tool_name( with evospec:tool_name( — but not if already prefixed
+        result = re.sub(
+            rf'(?<!evospec:)(?<!\w){re.escape(tool)}(?=\()',
+            f'evospec:{tool}',
+            result,
+        )
+    return result
+
+
+def _build_skills_context_md(ctx: dict) -> str:
+    """Generate shared references/context.md content from _context.yaml."""
+    lines: list[str] = []
+
+    lines.append(f"# {ctx['framework']['name']} — Agent Context")
+    lines.append("")
+    lines.append(f"> {ctx['framework']['principle']}")
+    lines.append("")
+    lines.append(f"{ctx['framework']['description']}")
+    lines.append("")
+
+    # Layers
+    lines.append("## Layers")
+    lines.append("")
+    for layer in ctx["layers"]:
+        lines.append(
+            f"- **{layer['name']}** ({layer['zone']}): "
+            f"{layer['knowledge_stage']} — {layer['approach']} → `{layer['artifact']}`"
+        )
+    lines.append("")
+
+    # Zones
+    lines.append("## Zone Classification")
+    lines.append("")
+    lines.append("| Zone | Required Artifacts | Guardrails |")
+    lines.append("|------|-------------------|------------|")
+    for zone in ctx["zones"]:
+        lines.append(f"| **{zone['name']}** | {zone['required_artifacts']} | {zone['guardrails']} |")
+    lines.append("")
+
+    # Entry points
+    lines.append("## Entry Points")
+    lines.append("")
+    for ep in ctx["entry_points"]:
+        lines.append(f"- **{ep['type']}**: {ep['when']} → {ep['artifacts']}")
+    lines.append("")
+
+    # Invariant resolutions
+    lines.append("## Invariant Resolutions")
+    lines.append("")
+    for res in ctx["invariant_resolutions"]:
+        lines.append(f"- **{res['id']}** — {res['description']}")
+    lines.append("")
+
+    # MCP surface
+    lines.append("## MCP Server")
+    lines.append("")
+    lines.append(f"Start: `{ctx['mcp']['start_command']}`")
+    lines.append("")
+    lines.append("**Tools** (model-invoked actions):")
+    for tool in ctx["mcp"]["tools"]:
+        lines.append(f"- `evospec:{tool.split('(')[0].split(' —')[0].strip()}`")
+    lines.append("")
+    lines.append("**Resources** (ambient context):")
+    for res in ctx["mcp"]["resources"]:
+        lines.append(f"- `{res.split(' —')[0].strip()}`")
+    lines.append("")
+
+    # Implementation rules
+    lines.append("## Implementation Rules")
+    lines.append("")
+    lines.append("### Before any change:")
+    for rule in ctx["implementation_rules"]["before_any_change"]:
+        lines.append(f"- {rule}")
+    lines.append("")
+    lines.append("### Core zone:")
+    for rule in ctx["implementation_rules"]["core_zone"]:
+        lines.append(f"- {rule}")
+    lines.append("")
+    lines.append("### Edge zone:")
+    for rule in ctx["implementation_rules"]["edge_zone"]:
+        lines.append(f"- {rule}")
+    lines.append("")
+
+    # Knowledge funnel
+    lines.append("## Knowledge Funnel")
+    lines.append("")
+    for kf in ctx["knowledge_funnel"]:
+        lines.append(f"- **{kf['stage']}** ({kf['zone']}): {kf['guidance']}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _emit_skills(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
+    """Emit .agents/skills/evospec-*/SKILL.md + shared references/context.md."""
+    skills_root = dest / ".agents" / "skills"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    created = []
+
+    # Build shared context once
+    context_content = _build_skills_context_md(ctx)
+
+    for wf in workflows:
+        skill_id = f"evospec-{wf['id']}"
+        skill_dir = skills_root / skill_id
+        skill_dir.mkdir(parents=True, exist_ok=True)
+
+        # --- SKILL.md ---
+        lines: list[str] = []
+
+        # Frontmatter
+        lines.append("---")
+        lines.append(f"name: {skill_id}")
+        lines.append(f"description: {wf['description']}")
+        lines.append("---")
+        lines.append("")
+
+        # Title
+        lines.append(f"# {wf['name']}")
+        lines.append("")
+
+        # Context (brief)
+        if wf.get("context"):
+            # Take first paragraph only for brevity
+            ctx_text = wf["context"].strip()
+            first_para = ctx_text.split("\n\n")[0]
+            lines.append("## Context")
+            lines.append("")
+            lines.append(first_para.strip())
+            lines.append("")
+            lines.append("See [references/context.md](references/context.md) for full framework context.")
+            lines.append("")
+
+        # When to use
+        if wf.get("when_to_use"):
+            lines.append("## When to Use")
+            lines.append("")
+            lines.append(wf["when_to_use"].rstrip())
+            lines.append("")
+
+        # Steps (compact, with MCP tool references)
+        if wf.get("steps"):
+            lines.append("## Steps")
+            lines.append("")
+            for step in wf["steps"]:
+                title = step["title"]
+                if step.get("interactive"):
+                    title += " *(interactive)*"
+                if step.get("critical"):
+                    title += " *(CRITICAL)*"
+                lines.append(f"{step['id']}. **{title}**")
+
+                # Add MCP tool fully-qualified references to instructions
+                instructions = _add_mcp_tool_refs(step["instructions"].rstrip())
+                for iline in instructions.split("\n"):
+                    lines.append(f"   {iline}")
+                lines.append("")
+
+        # Rules
+        if wf.get("rules"):
+            lines.append("## Rules")
+            lines.append("")
+            for rule in wf["rules"]:
+                lines.append(f"- {rule}")
+            lines.append("")
+
+        # Reference link
+        lines.append("---")
+        lines.append("")
+        lines.append("*Full framework context: [references/context.md](references/context.md)*")
+        lines.append("")
+
+        skill_path = skill_dir / "SKILL.md"
+        skill_path.write_text("\n".join(lines))
+        created.append(skill_path)
+
+        # --- references/context.md ---
+        ref_dir = skill_dir / "references"
+        ref_dir.mkdir(parents=True, exist_ok=True)
+        ref_path = ref_dir / "context.md"
+        ref_path.write_text(context_content)
+        created.append(ref_path)
+
+    return created
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -509,6 +711,7 @@ EMITTERS = {
     "windsurf": _emit_windsurf,
     "claude": _emit_claude,
     "cursor": _emit_cursor,
+    "skills": _emit_skills,
 }
 
 

@@ -1,0 +1,136 @@
+---
+name: evospec-tasks
+description: Generate an actionable, dependency-ordered tasks.md for AI-driven implementation based on the spec artifacts.
+---
+
+# Tasks
+
+## Context
+
+This workflow generates a **machine-parseable, dependency-ordered task list** that AI agents can execute. Tasks are the bridge between specification and implementation.
+
+See [references/context.md](references/context.md) for full framework context.
+
+## Steps
+
+1. **Find the spec directory**
+   - Check `evospec.yaml` exists. If not: instruct user to run `evospec init`.
+   - If user input contains a spec path, use it.
+   - Otherwise, list available specs and let user choose.
+   - Read `spec.yaml`, `discovery-spec.md`, `domain-contract.md` (whichever exist).
+
+2. **Load implementation context**
+   - From `spec.yaml`: zone, classification, invariants, fitness_functions, traceability
+   - From `discovery-spec.md`: selected solution approach, prototype plan
+   - From `domain-contract.md`: entities, state machines, authorization rules, events
+   - From `evospec.yaml`: project tech stack, team topology, bounded contexts
+
+3. **Determine task generation strategy by zone**
+   ### Edge Zone (Discovery Layer)
+   - Focus on **prototyping speed** and **learning instrumentation**
+   - Phase structure:
+     1. Setup: feature flag, experiment infrastructure
+     2. Prototype: minimal UI/API to test hypothesis
+     3. Instrumentation: metrics, analytics, A/B test setup
+     4. Validation: smoke tests, user test scripts
+   - Mark most tasks as [P] (parallelizable) — edge work is loosely coupled
+   
+   ### Hybrid Zone
+   - Focus on **boundary protection** while allowing iteration
+   - Phase structure:
+     1. Setup: dependencies, configuration
+     2. Foundation: schema migrations, base models (from domain contract)
+     3. Contract Tests: boundary tests between discovery and core
+     4. Core Implementation: entities, services matching domain contract
+     5. Edge Implementation: UX, experimental features
+     6. Guardrails: fitness functions for invariants
+   - Sequential for core tasks, parallel for edge tasks
+   
+   ### Core Zone (Core Engine)
+   - Focus on **correctness, invariants, and fitness functions**
+   - Phase structure:
+     1. Setup: dependencies, configuration
+     2. Foundation: schema migrations, base models
+     3. Fitness Functions: write tests FIRST (TDD for core)
+     4. Core Implementation: entities, aggregates, services
+     5. Authorization: role checks, tenant isolation
+     6. Integration: wire endpoints, middleware
+     7. Guardrails: run all fitness functions, contract tests
+     8. Polish: logging, error handling, documentation
+   - Strictly sequential — core changes must be verified at each step
+
+4. **Generate tasks.md**
+   Use the tasks template. For each task:
+   
+   **Task Format** (REQUIRED):
+   ```
+   - [ ] T001 [P] [Phase] Description with exact file path
+   ```
+   
+   **Format Rules**:
+   - `- [ ]`: Checkbox (mark `[X]` when complete)
+   - `T001`: Sequential task ID
+   - `[P]`: Only if parallelizable (different files, no dependency on incomplete tasks)
+   - `[Phase]`: Phase label (Setup, Foundation, Core, Integration, Guardrails, Polish)
+   - Description: Clear action verb + exact file path
+   
+   **Task Quality Rules**:
+   - Every task must reference an exact file path
+   - Every task must be completable by an AI agent without additional context
+   - Every task should be independently verifiable
+   - Tasks affecting the same file must be sequential (not [P])
+
+5. **Generate invariant-to-task mapping**
+   - Every invariant in spec.yaml must have at least one corresponding task
+   - Every fitness function must have a task to implement it
+   - Include this mapping in the tasks.md as a traceability section
+
+6. **Generate dependency graph**
+   ```
+   Phase 1 → Phase 2 → Phase 3 → ...
+   Within phases: T001 → T003 (sequential), T002 || T004 (parallel)
+   ```
+
+7. **Report**
+   - Total task count
+   - Tasks per phase
+   - Parallel opportunities
+   - Invariant coverage (% of invariants with tasks)
+   - Suggested MVP scope
+   - Estimated implementation phases
+
+8. **Create implementation-spec.md skeleton (deliberate mode only)**
+   **Skip this step for edge/experimental specs** — those should use `/evospec.capture`
+   after prototyping to formalize retroactively. Don't force documentation before the
+   user is ready.
+   
+   **For core/hybrid specs or when the user is deliberate** (knows what they want):
+   Create `implementation-spec.md` in the spec directory with:
+   - Overview section: filled from spec.yaml (zone, tech stack from evospec.yaml)
+   - Component Architecture: empty table, ready to fill during implementation
+   - API Integration: pre-filled from traceability.endpoints in spec.yaml
+   - State Management: empty
+   - Configuration: pre-filled from known env vars
+   - Invariant Compliance: pre-filled table from spec.yaml invariant_impact.conflicts
+   - All other sections: skeleton headers only
+   - Changelog: first entry "Skeleton created from /evospec.tasks"
+   
+   Use the `implementation-spec.md` template from `specs/_templates/`.
+   
+   This document will be updated incrementally during `/evospec.implement`.
+   
+   **For edge specs**: mention that `/evospec.capture` is available after prototyping.
+
+## Rules
+
+- NEVER generate tasks without reading the spec artifacts first
+- Core zone: fitness function tasks BEFORE implementation tasks (TDD)
+- Edge zone: prototype tasks BEFORE instrumentation tasks
+- Every invariant must map to at least one task
+- Every task must have an exact file path
+- Tasks must be specific enough for an AI agent to execute without asking questions
+- Maximum 50 tasks per spec (break into sub-specs if larger)
+
+---
+
+*Full framework context: [references/context.md](references/context.md)*

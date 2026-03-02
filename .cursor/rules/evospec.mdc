@@ -51,13 +51,13 @@ All entry points MUST run invariant impact check before proceeding.
 
 ## Entity Registry
 
-Check `evospec://entities` for canonical entity names. evospec check validates entities_touched against registered entities.
+Call `evospec:get_entities()` for canonical entity names. evospec check validates entities_touched against registered entities.
 
 ## MCP Server
 
 Start: `evospec serve`
 
-Resources: evospec://config, evospec://glossary, evospec://context-map, evospec://invariants, evospec://entities
+Resources: evospec://project, evospec://glossary, evospec://context-map, evospec://config, evospec://entities, evospec://invariants
 
 ## Knowledge Funnel
 

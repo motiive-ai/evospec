@@ -20,16 +20,50 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 
 
-@mcp.resource("evospec://config")
-def get_config() -> str:
-    """Return the project's evospec.yaml configuration."""
+@mcp.resource("evospec://project")
+def get_project() -> str:
+    """Return lean project metadata — name, description, zone defaults.
+
+    Does NOT expose internal config (teams, strategy, reverse settings).
+    """
     import yaml
 
     root = _find_root()
     if root is None:
         return "ERROR: No evospec.yaml found. Run `evospec init` first."
-    config_path = root / "evospec.yaml"
-    return config_path.read_text()
+    config = yaml.safe_load((root / "evospec.yaml").read_text()) or {}
+    project = config.get("project", {})
+    lean = {
+        "project": {
+            "name": project.get("name", ""),
+            "description": project.get("description", ""),
+        },
+        "schema": config.get("schema", {}),
+        "paths": config.get("paths", {}),
+    }
+    return yaml.dump(lean, default_flow_style=False, sort_keys=False)
+
+
+@mcp.resource("evospec://config")
+def get_config() -> str:
+    """[DEPRECATED — use evospec://project] Return lean project metadata."""
+    import yaml
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found. Run `evospec init` first."
+    config = yaml.safe_load((root / "evospec.yaml").read_text()) or {}
+    project = config.get("project", {})
+    lean = {
+        "_deprecated": "Use evospec://project instead. This resource will be removed in the next major version.",
+        "project": {
+            "name": project.get("name", ""),
+            "description": project.get("description", ""),
+        },
+        "schema": config.get("schema", {}),
+        "paths": config.get("paths", {}),
+    }
+    return yaml.dump(lean, default_flow_style=False, sort_keys=False)
 
 
 @mcp.resource("evospec://glossary")
@@ -58,126 +92,24 @@ def get_context_map() -> str:
 
 @mcp.resource("evospec://entities")
 def get_entity_registry() -> str:
-    """Return the domain entity registry — canonical list of all domain entities, their contexts, fields, and relationships."""
-    from evospec.core.config import load_config
-
-    root = _find_root()
-    if root is None:
-        return "ERROR: No evospec.yaml found."
-
-    config = load_config(root)
-    entities = config.get("domain", {}).get("entities", [])
-
-    # Include upstream entities
-    for name, upstream in config.get("_upstreams", {}).items():
-        for ent in upstream.get("entities", []):
-            ent_copy = dict(ent)
-            ent_copy["_upstream"] = name
-            entities.append(ent_copy)
-
-    if not entities:
-        return "No entities defined. Add specs/domain/entities.yaml or run `evospec reverse db`."
-
-    lines = ["# Domain Entity Registry", ""]
-    lines.append(f"Total: {len(entities)} entities.\n")
-
-    # Group by context
-    by_context: dict[str, list[dict]] = {}
-    for ent in entities:
-        ctx = ent.get("context", "unassigned")
-        by_context.setdefault(ctx, []).append(ent)
-
-    for ctx, ctx_entities in sorted(by_context.items()):
-        lines.append(f"## Context: {ctx}")
-        lines.append("")
-        for ent in ctx_entities:
-            name = ent.get("name", "?")
-            table = ent.get("table", "")
-            agg = " (aggregate root)" if ent.get("aggregate_root") else ""
-            lines.append(f"### {name}{agg}")
-            if table:
-                lines.append(f"Table: `{table}`")
-
-            fields = ent.get("fields", [])
-            if fields:
-                lines.append("")
-                lines.append("| Field | Type | Constraints |")
-                lines.append("|-------|------|-------------|")
-                for f in fields:
-                    constraints = f.get("constraints", "")
-                    lines.append(f"| {f.get('name', '?')} | {f.get('type', '?')} | {constraints} |")
-
-            rels = ent.get("relationships", [])
-            if rels:
-                lines.append("")
-                lines.append("Relationships:")
-                for r in rels:
-                    lines.append(f"- → {r.get('target', '?')} ({r.get('type', '?')})")
-
-            inv_refs = ent.get("invariants", [])
-            if inv_refs:
-                lines.append("")
-                lines.append(f"Invariants: {', '.join(inv_refs)}")
-
-            lines.append("")
-
-    return "\n".join(lines)
+    """[DEPRECATED — use evospec:get_entities tool] Return the domain entity registry."""
+    result = _build_entity_registry()
+    return (
+        "# ⚠ DEPRECATED: Use the `get_entities()` MCP tool instead of this resource.\n"
+        "# This resource will be removed in the next major version.\n\n"
+        + result
+    )
 
 
 @mcp.resource("evospec://invariants")
 def get_all_invariants() -> str:
-    """Return all invariants from all core/hybrid specs — the safety net for experiments."""
-    import yaml
-
-    root = _find_root()
-    if root is None:
-        return "ERROR: No evospec.yaml found."
-
-    specs_dir = root / "specs" / "changes"
-    if not specs_dir.exists():
-        return "No specs directory found."
-
-    lines = ["# All Invariants (Core Safety Net)", ""]
-    count = 0
-
-    for spec_dir in sorted(specs_dir.iterdir()):
-        spec_yaml = spec_dir / "spec.yaml"
-        if not spec_yaml.exists():
-            continue
-        spec = yaml.safe_load(spec_yaml.read_text()) or {}
-        zone = spec.get("zone", "")
-        if zone not in ("core", "hybrid"):
-            continue
-
-        invariants = spec.get("invariants", [])
-        if not invariants:
-            continue
-
-        title = spec.get("title", spec_dir.name)
-        bc = spec.get("bounded_context", "")
-        lines.append(f"## {title} ({zone}, context: {bc or 'unspecified'})")
-        lines.append(f"Spec: `{spec_dir.relative_to(root)}`")
-        lines.append("")
-
-        for inv in invariants:
-            inv_id = inv.get("id", "?")
-            statement = inv.get("statement", "")
-            enforcement = inv.get("enforcement", "")
-            ff = inv.get("fitness_function", "")
-            lines.append(f"- **{inv_id}**: {statement}")
-            if enforcement:
-                lines.append(f"  - Enforcement: {enforcement}")
-            if ff:
-                lines.append(f"  - Fitness function: `{ff}`")
-            count += 1
-
-        lines.append("")
-
-    if count == 0:
-        return "No invariants defined yet. Core specs have no invariants."
-
-    lines.insert(1, f"Total: {count} invariants across core/hybrid specs.")
-    return "\n".join(lines)
+    """[DEPRECATED — use evospec:get_invariants tool] Return all invariants."""
+    result = _build_invariants_text()
+    return (
+        "# ⚠ DEPRECATED: Use the `get_invariants()` MCP tool instead of this resource.\n"
+        "# This resource will be removed in the next major version.\n\n"
+        + result
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1071,57 +1003,302 @@ def run_fitness_functions(spec_path: str | None = None) -> dict:
     }
 
 
+@mcp.tool()
+def get_upstream_apis(upstream_name: str | None = None) -> dict:
+    """List API endpoints from upstream services' traceability data.
+
+    Reads upstream repos' spec.yaml traceability.endpoints and returns the
+    aggregated API surface. Only returns data from upstream services declared
+    in evospec.yaml — never exposes local project internals.
+
+    Args:
+        upstream_name: Filter by a specific upstream service name. If None, returns all.
+    """
+    from evospec.core.config import load_config
+    import yaml
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    upstreams_cfg = config.get("_upstreams", {})
+    if not upstreams_cfg:
+        return {"error": "No upstreams configured in evospec.yaml.", "apis": []}
+
+    results: dict[str, list[str]] = {}
+
+    for name, up_data in upstreams_cfg.items():
+        if upstream_name and name != upstream_name:
+            continue
+
+        upstream_root = Path(up_data.get("root", ""))
+        if not upstream_root.exists():
+            continue
+
+        # Collect endpoints from all specs in the upstream
+        from evospec.core.config import get_paths
+        upstream_config_path = upstream_root / "evospec.yaml"
+        if not upstream_config_path.exists():
+            continue
+        upstream_cfg = yaml.safe_load(upstream_config_path.read_text()) or {}
+        specs_dir = upstream_root / get_paths(upstream_cfg).get("specs", "specs/changes")
+        endpoints: list[str] = []
+
+        if specs_dir.exists():
+            for spec_dir in sorted(specs_dir.iterdir()):
+                spec_yaml = spec_dir / "spec.yaml"
+                if not spec_yaml.exists():
+                    continue
+                spec = yaml.safe_load(spec_yaml.read_text()) or {}
+                for ep in spec.get("traceability", {}).get("endpoints", []):
+                    if ep not in endpoints:
+                        endpoints.append(ep)
+
+        if endpoints:
+            results[name] = endpoints
+
+    if upstream_name and upstream_name not in results:
+        return {
+            "error": f"Upstream '{upstream_name}' not found or has no endpoints.",
+            "apis": {},
+        }
+
+    return {
+        "apis": results,
+        "total_endpoints": sum(len(eps) for eps in results.values()),
+        "filter": {"upstream_name": upstream_name},
+    }
+
+
+@mcp.tool()
+def parse_contract_file(file_path: str) -> dict:
+    """Parse an API contract or response file and extract entities/fields/relationships.
+
+    Supports OpenAPI/Swagger, JSON Schema, and JSON example files.
+    Use this when a UX or frontend team needs to understand entities from
+    an API response or contract file.
+
+    Args:
+        file_path: Path to the contract file (absolute or relative to project root)
+    """
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    target = Path(file_path)
+    if not target.is_absolute():
+        target = root / target
+
+    if not target.exists():
+        return {"error": f"File not found: {file_path}"}
+
+    suffix = target.suffix.lower()
+    if suffix not in (".json", ".yaml", ".yml"):
+        return {"error": f"Unsupported file format: {suffix}. Supported: .json, .yaml, .yml"}
+
+    from evospec.mcp.contract_parser import parse_contract
+
+    try:
+        return parse_contract(target)
+    except Exception as e:
+        return {"error": f"Failed to parse contract file: {e}"}
+
+
+@mcp.tool()
+def get_entities(
+    context: str | None = None,
+    upstream: str | None = None,
+) -> dict:
+    """Get domain entities, optionally filtered by bounded context or upstream.
+
+    Returns the entity registry as structured data. Use this instead of the
+    deprecated evospec://entities resource.
+
+    Args:
+        context: Filter by bounded context name (case-insensitive)
+        upstream: Filter by upstream service name (e.g., 'order-service')
+    """
+    text = _build_entity_registry(context=context, upstream=upstream)
+    return {
+        "text": text,
+        "filters": {"context": context, "upstream": upstream},
+    }
+
+
+@mcp.tool()
+def get_invariants(context: str | None = None) -> dict:
+    """Get all invariants from core/hybrid specs, optionally filtered by bounded context.
+
+    Returns invariants as structured data. Use this instead of the
+    deprecated evospec://invariants resource.
+
+    Args:
+        context: Filter by bounded context name (case-insensitive)
+    """
+    text = _build_invariants_text(context=context)
+    return {
+        "text": text,
+        "filter": {"context": context},
+    }
+
+
 # ---------------------------------------------------------------------------
-# Prompts — reusable prompt templates for agents
+# Prompts — removed (replaced by Skills)
 # ---------------------------------------------------------------------------
-
-
-@mcp.prompt()
-def discover_feature(feature_description: str) -> str:
-    """Generate a prompt for creating a discovery spec from a feature description."""
-    return (
-        f"Create a discovery spec for the following feature:\n\n"
-        f"{feature_description}\n\n"
-        f"Follow the EvoSpec discovery-spec.md template structure:\n"
-        f"1. Strategic Fit (Roger Martin - Playing to Win)\n"
-        f"2. Outcome & Opportunity (Teresa Torres - Opportunity Solution Tree)\n"
-        f"3. Empathy & Research (Design Thinking - Empathize)\n"
-        f"4. Problem Definition (Design Thinking - Define)\n"
-        f"5. Ideation (Design Thinking - Ideate)\n"
-        f"6. Assumptions & Experiments (Teresa Torres)\n"
-        f"7. Prototype & Test Plan (Design Thinking - Prototype + Test)\n"
-        f"8. Kill Criteria\n"
-        f"9. Organizational Risk (Hogan)\n"
-        f"10. Domain Boundaries\n\n"
-        f"Focus on WHAT and WHY, not HOW. No implementation details."
-    )
-
-
-@mcp.prompt()
-def domain_contract(bounded_context: str) -> str:
-    """Generate a prompt for creating a domain contract for a bounded context."""
-    return (
-        f"Create a domain contract for the '{bounded_context}' bounded context.\n\n"
-        f"Follow the EvoSpec domain-contract.md template structure:\n"
-        f"1. Context & Purpose (bounded context, context map position)\n"
-        f"2. Strategic Classification (core/supporting/generic)\n"
-        f"3. Aggregates & Entities (aggregate root, value objects, constraints)\n"
-        f"4. Invariants (testable propositions with enforcement mechanisms)\n"
-        f"5. State Machine & Transitions (with forbidden transitions)\n"
-        f"6. Domain Events (produced, consumed, ordering guarantees)\n"
-        f"7. Authorization & Policies (roles, tenant isolation)\n"
-        f"8. Backwards Compatibility & Migration\n"
-        f"9. Fitness Functions (automated, one per invariant minimum)\n"
-        f"10. Team Ownership (Team Topologies)\n"
-        f"11. Traceability (endpoints, tables, modules)\n"
-        f"12. Anti-Requirements (what is NOT in scope)\n\n"
-        f"Every invariant MUST be a testable proposition with an enforcement mechanism."
-    )
+# discover_feature and domain_contract prompts have been removed.
+# Use Agent Skills (evospec-discover, evospec-contract) instead.
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_entity_registry(
+    context: str | None = None,
+    upstream: str | None = None,
+) -> str:
+    """Build entity registry text, optionally filtered by context or upstream."""
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    config = load_config(root)
+    entities: list[dict] = []
+
+    # Local entities (skip if filtering by upstream only)
+    if upstream is None:
+        for ent in config.get("domain", {}).get("entities", []):
+            if context and ent.get("context", "").lower() != context.lower():
+                continue
+            entities.append(ent)
+    elif upstream is not None:
+        # Only include entities from a specific upstream
+        up_data = config.get("_upstreams", {}).get(upstream, {})
+        for ent in up_data.get("entities", []):
+            ent_copy = dict(ent)
+            ent_copy["_upstream"] = upstream
+            if context and ent_copy.get("context", "").lower() != context.lower():
+                continue
+            entities.append(ent_copy)
+    # If no upstream filter, also include all upstream entities
+    if upstream is None:
+        for name, up_data in config.get("_upstreams", {}).items():
+            for ent in up_data.get("entities", []):
+                ent_copy = dict(ent)
+                ent_copy["_upstream"] = name
+                if context and ent_copy.get("context", "").lower() != context.lower():
+                    continue
+                entities.append(ent_copy)
+
+    if not entities:
+        return "No entities found matching the filter."
+
+    lines = ["# Domain Entity Registry", ""]
+    lines.append(f"Total: {len(entities)} entities.\n")
+
+    by_context: dict[str, list[dict]] = {}
+    for ent in entities:
+        ctx = ent.get("context", "unassigned")
+        by_context.setdefault(ctx, []).append(ent)
+
+    for ctx, ctx_entities in sorted(by_context.items()):
+        lines.append(f"## Context: {ctx}")
+        lines.append("")
+        for ent in ctx_entities:
+            name = ent.get("name", "?")
+            table = ent.get("table", "")
+            agg = " (aggregate root)" if ent.get("aggregate_root") else ""
+            upstream_tag = f" [upstream: {ent['_upstream']}]" if "_upstream" in ent else ""
+            lines.append(f"### {name}{agg}{upstream_tag}")
+            if table:
+                lines.append(f"Table: `{table}`")
+
+            fields = ent.get("fields", [])
+            if fields:
+                lines.append("")
+                lines.append("| Field | Type | Constraints |")
+                lines.append("|-------|------|-------------|")
+                for f in fields:
+                    constraints = f.get("constraints", "")
+                    lines.append(f"| {f.get('name', '?')} | {f.get('type', '?')} | {constraints} |")
+
+            rels = ent.get("relationships", [])
+            if rels:
+                lines.append("")
+                lines.append("Relationships:")
+                for r in rels:
+                    lines.append(f"- \u2192 {r.get('target', '?')} ({r.get('type', '?')})")
+
+            inv_refs = ent.get("invariants", [])
+            if inv_refs:
+                lines.append("")
+                lines.append(f"Invariants: {', '.join(inv_refs)}")
+
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def _build_invariants_text(context: str | None = None) -> str:
+    """Build invariants text, optionally filtered by bounded context."""
+    import yaml
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    specs_dir = root / "specs" / "changes"
+    if not specs_dir.exists():
+        return "No specs directory found."
+
+    lines = ["# All Invariants (Core Safety Net)", ""]
+    count = 0
+
+    for spec_dir in sorted(specs_dir.iterdir()):
+        spec_yaml = spec_dir / "spec.yaml"
+        if not spec_yaml.exists():
+            continue
+        spec = yaml.safe_load(spec_yaml.read_text()) or {}
+        zone = spec.get("zone", "")
+        if zone not in ("core", "hybrid"):
+            continue
+
+        bc = spec.get("bounded_context", "")
+        if context and bc.lower() != context.lower():
+            continue
+
+        invariants = spec.get("invariants", [])
+        if not invariants:
+            continue
+
+        title = spec.get("title", spec_dir.name)
+        lines.append(f"## {title} ({zone}, context: {bc or 'unspecified'})")
+        lines.append(f"Spec: `{spec_dir.relative_to(root)}`")
+        lines.append("")
+
+        for inv in invariants:
+            inv_id = inv.get("id", "?")
+            statement = inv.get("statement", "")
+            enforcement = inv.get("enforcement", "")
+            ff = inv.get("fitness_function", "")
+            lines.append(f"- **{inv_id}**: {statement}")
+            if enforcement:
+                lines.append(f"  - Enforcement: {enforcement}")
+            if ff:
+                lines.append(f"  - Fitness function: `{ff}`")
+            count += 1
+
+        lines.append("")
+
+    if count == 0:
+        return "No invariants defined yet. Core specs have no invariants."
+
+    lines.insert(1, f"Total: {count} invariants across core/hybrid specs.")
+    return "\n".join(lines)
 
 
 def _find_root() -> Path | None:

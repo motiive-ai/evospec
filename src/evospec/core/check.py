@@ -13,6 +13,16 @@ console = Console()
 _PACKAGE_SCHEMA = Path(__file__).parent.parent / "schemas" / "spec.schema.json"
 
 
+def _version_newer(version: str, known: str) -> bool:
+    """Return True if version is strictly newer than known (semver comparison)."""
+    try:
+        v_parts = [int(x) for x in version.split(".")]
+        k_parts = [int(x) for x in known.split(".")]
+        return v_parts > k_parts
+    except (ValueError, AttributeError):
+        return False
+
+
 def _load_schema() -> dict | None:
     """Load the spec JSON schema.
 
@@ -54,6 +64,18 @@ def run_checks(strict: bool = False) -> None:
         return
 
     schema = _load_schema()
+
+    # Schema version gate (T012d)
+    schema_version = config.get("schema", {}).get("version", "1.0.0")
+    known_version = "1.0.0"
+    if _version_newer(schema_version, known_version):
+        console.print(
+            f"[yellow]⚠ evospec.yaml declares schema version {schema_version}, "
+            f"but this EvoSpec version only knows {known_version}. "
+            f"Some new fields may not be validated.[/yellow]"
+        )
+        console.print()
+
     errors = 0
     warnings = 0
     checked = 0

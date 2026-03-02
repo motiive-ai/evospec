@@ -1,0 +1,134 @@
+---
+name: evospec-learn
+description: Record experiment results, update assumptions, log learnings, and decide next steps. The continuous discovery feedback loop.
+---
+
+# Learn
+
+## Context
+
+This workflow is the **feedback loop** of Continuous Discovery (Teresa Torres). It operates after an experiment has been run and results are available. The goal is to:
+
+See [references/context.md](references/context.md) for full framework context.
+
+## Steps
+
+1. **Find the spec**
+   - Check `evospec.yaml` exists.
+   - If user input contains a spec path, use it.
+   - Otherwise, list edge/hybrid specs and let user choose.
+   - Read `spec.yaml` and `discovery-spec.md`.
+
+2. **Identify what was tested**
+   - Show current assumptions from `spec.yaml` with their status.
+   - Ask: "Which assumption(s) were tested?" (reference by ID, e.g., A-001)
+   - If user input contains experiment results, extract them.
+
+3. **Record the experiment**
+   Add to `discovery.experiments[]` in spec.yaml:
+   - Generate next experiment ID (EXP-001, EXP-002, ...)
+   - Capture:
+     - `assumption_id`: which assumption was tested
+     - `type`: prototype | interview | survey | A-B-test | wizard-of-oz | analytics | spike
+     - `description`: what was done
+     - `sample_size`: how many users/data points
+     - `started_at` / `completed_at`: dates
+     - `result`: qualitative or quantitative outcome
+     - `confidence`: high | medium | low
+   - Add the experiment to the experiments table in `discovery-spec.md`
+
+4. **Update assumption status**
+   Based on the result and confidence, update the assumption:
+   
+   | Result + Confidence | New Status | Action |
+   |-------------------|------------|--------|
+   | Positive + high | `validated` | Consider promoting to core |
+   | Positive + medium | `testing` | Design follow-up experiment |
+   | Positive + low | `testing` | Need more data |
+   | Negative + high | `invalidated` | Pivot or kill |
+   | Negative + medium | `testing` | Re-examine test design |
+   | Ambiguous | `testing` | Redesign experiment |
+   
+   Update the assumption in both `spec.yaml` and `discovery-spec.md`.
+
+5. **Decide next step *(interactive)* *(CRITICAL)***
+   Ask the user (or infer from results):
+   
+   ### Continue
+   - Need more data on this assumption
+   - Design the next experiment
+   - Keep current iteration
+   
+   ### Pivot
+   - Assumption invalidated, but opportunity is still valid
+   - Update `assumption.pivot_to` with new direction
+   - Increment `discovery.iteration` in spec.yaml
+   - Add a pivot entry to the Pivots table in discovery-spec.md
+   - May need to update problem statement and ideation sections
+   
+   ### Kill
+   - Kill criteria met, or opportunity is not worth pursuing
+   - Set feature status to `killed` in evospec.yaml
+   - Record kill reason
+   - Update spec.yaml status to `abandoned`
+   
+   ### Promote to Core
+   - Assumption validated with high confidence
+   - This pattern should become an invariant
+   - Add to "Promotion Candidates" table in discovery-spec.md
+   - Suggest running the Contract workflow to create a domain contract
+   - Update feature knowledge_stage from `mystery` to `heuristic` or `algorithm`
+
+6. **Log the learning**
+   Add to `discovery.learnings[]` in spec.yaml:
+   - `date`: today
+   - `iteration`: current iteration number
+   - `experiment_id`: the experiment just recorded
+   - `learning`: one-sentence summary of what was learned
+   - `impact`: how this changes the spec or approach
+   - `spec_changed`: true if the discovery-spec.md was modified
+   
+   Also update the Learning Log section in `discovery-spec.md`.
+
+7. **Update discovery status**
+   - Recalculate: how many assumptions tested vs. total?
+   - Set `discovery.next_checkpoint` to next cadence date
+   - If all high-risk assumptions validated → suggest moving to the Tasks workflow
+   - If most assumptions invalidated → suggest pivoting or killing
+
+8. **Report**
+   Display a discovery dashboard:
+   ```
+   Spec: [title] (iteration [N])
+   
+   Assumptions:
+     A-001: validated ✓ (desirability)
+     A-002: testing ⟳ (feasibility)
+     A-003: untested ○ (viability)
+   
+   Experiments: [completed]/[total]
+   Last learning: "[summary]"
+   Next checkpoint: [date]
+   
+   Decision: [continue/pivot/kill/promote]
+   ```
+   
+   Suggest next action:
+   - If continue: "Design next experiment for A-002"
+   - If pivot: "Updated iteration to [N+1]. Review updated discovery-spec.md"
+   - If kill: "Feature killed. Reason: [reason]"
+   - If promote: "Run the Contract workflow to codify [assumption] as an invariant"
+
+## Rules
+
+- ALWAYS update both spec.yaml AND discovery-spec.md — they must stay in sync
+- ALWAYS log a learning — even if the result is 'we learned nothing'
+- NEVER skip the decision step — every experiment must lead to: continue, pivot, kill, or promote
+- Pivots increment iteration — this is how we track how many times we've changed direction
+- Promotions create contracts — when an assumption becomes an algorithm, it needs a domain-contract.md
+- If an assumption has been testing for more than 3 experiments without resolution, flag it
+- If kill deadline has passed, force a kill/continue decision
+
+---
+
+*Full framework context: [references/context.md](references/context.md)*

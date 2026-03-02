@@ -77,7 +77,8 @@ entity_registry:
   description: "specs/domain/entities.yaml is the canonical, machine-readable entity catalog."
   location: "specs/domain/entities.yaml"
   fields: "name, context, table, aggregate_root, description, fields (name/type/constraints), relationships (target/type), invariants (IDs)"
-  mcp_resource: "evospec://entities"
+  mcp_tool: "evospec:get_entities(context?, upstream?) — filtered entity registry"
+  mcp_resource_deprecated: "evospec://entities — deprecated, use get_entities() tool instead"
   populate_command: "evospec reverse db"
   validation: "evospec check validates entities_touched against registered entities"
 
@@ -122,15 +123,36 @@ mcp:
     - "record_experiment(spec_path, assumption_id, ...) — log experiment results"
     - "update_assumption(spec_path, assumption_id, ...) — update assumption status"
     - "run_fitness_functions(spec_path?) — execute fitness function tests"
+    - "get_entities(context?, upstream?) — filtered entity registry (by bounded context or upstream)"
+    - "get_invariants(context?) — filtered invariants (by bounded context)"
+    - "get_upstream_apis(upstream_name?) — list API endpoints from upstream services"
+    - "parse_contract_file(file_path) — extract entities from OpenAPI/JSON Schema/JSON example files"
   resources:
-    - "evospec://config — project configuration"
+    - "evospec://project — lean project metadata (name, description, paths)"
     - "evospec://glossary — ubiquitous language"
     - "evospec://context-map — bounded context relationships"
-    - "evospec://invariants — all invariants from core/hybrid specs (the safety net)"
-    - "evospec://entities — domain entity registry (canonical entity catalog)"
-  prompts:
-    - "discover_feature(description) — discovery spec generation prompt"
-    - "domain_contract(bounded_context) — domain contract generation prompt"
+    - "evospec://config — DEPRECATED alias for evospec://project (will be removed)"
+    - "evospec://entities — DEPRECATED alias for get_entities() tool (will be removed)"
+    - "evospec://invariants — DEPRECATED alias for get_invariants() tool (will be removed)"
+  # Prompts removed — replaced by Agent Skills (evospec-discover, evospec-contract, etc.)
+
+skills:
+  description: "Agent Skills (agentskills.io) — open standard for AI agent workflows, supported by Claude Code, Cursor, and Windsurf."
+  directory: ".agents/skills/"
+  format: |
+    Each skill lives in .agents/skills/evospec-{id}/SKILL.md with:
+    - YAML frontmatter: name, description (loaded at startup, ~100 tokens)
+    - Body: context, when_to_use, steps, rules (loaded on activation)
+    - Shared context: references/context.md (framework context, MCP surface)
+  progressive_disclosure: |
+    Only name + description loaded at conversation start.
+    Full SKILL.md content loaded when the skill is activated.
+    This keeps the initial token cost low (~100 tokens per skill).
+  mcp_references: |
+    Skills reference MCP tools by fully-qualified name: evospec:tool_name
+    Example: "Call evospec:check_invariant_impact(entities=[...], contexts=[...], description='...')"
+    This ensures agents know which MCP server tool to invoke.
+  generation: "evospec generate agents --platform skills"
 
 cli_commands:
   - "evospec init \"project-name\"              # Initialize project"
