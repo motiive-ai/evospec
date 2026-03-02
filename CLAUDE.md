@@ -30,6 +30,7 @@ specs/
 │       ├── improvement-scope.md # Brief scope doc (improvements only)
 │       ├── bugfix-report.md    # Root cause + fix strategy (bugfixes only)
 │       ├── tasks.md            # Implementation tasks (AI work queue)
+│       ├── implementation-spec.md # As-built blueprint (created by tasks, updated by implement)
 │       └── checks/             # Executable guardrails
 ├── domain/
 │   ├── entities.yaml           # Domain entity registry (fields, relationships, invariants)
@@ -587,6 +588,7 @@ Equivalent to Windsurf `/evospec.implement`.
    - Read `tasks.md` for the complete task list and execution plan
    - Read `domain-contract.md` if it exists (for core/hybrid: entity definitions, state machines)
    - Read `discovery-spec.md` if it exists (for edge/hybrid: solution approach)
+   - Read `implementation-spec.md` if it exists (skeleton from Tasks workflow)
    - Read `evospec.yaml` for project-level configuration
 
 3. **Pre-flight checks**:
@@ -630,7 +632,7 @@ Equivalent to Windsurf `/evospec.implement`.
    - Edge-touching tasks follow Edge rules (fast, prototype)
    - Contract tests at boundaries must pass before integration
 
-5. **Progress tracking**:
+5. **Progress tracking + implementation-spec updates**:
    - After each completed task, update `tasks.md` with `[X]`
    - Report progress after each phase:
      ```
@@ -638,12 +640,32 @@ Equivalent to Windsurf `/evospec.implement`.
      Remaining: [total_remaining] tasks across [phases_remaining] phases
      ```
    - If a task fails: report the error, suggest fix, ask user how to proceed
+   
+   **Update implementation-spec.md after each phase**:
+   - §2 Component Architecture: add new components/modules created in this phase
+   - §3 API Integration: update endpoints used, error handling decisions
+   - §4 State Management: update state shape if it changed
+   - §9 Invariant Compliance: fill in File:Line references for enforced invariants
+   - §12 Changelog: add entry for the completed phase
 
 6. **Post-implementation**:
    - Update `spec.yaml` traceability with actual file paths created
    - Update spec status to "in-progress" or "completed"
    - If core zone: verify all fitness functions pass
    - Suggest running the Check workflow for full validation
+   
+   **Finalize implementation-spec.md**:
+   - §1 Overview: verify tech stack table is complete, update status
+   - §5 Configuration: fill in all env vars and feature flags used
+   - §6 Error Handling: document all error scenarios discovered during implementation
+   - §7 Testing Strategy: list actual test files created
+   - §8 Deployment: fill in build commands and deploy target
+   - §10 Reproduction Instructions: verify setup/build/run/verify steps work
+   - §11 Known Limitations: document any tech debt or gaps
+   - §12 Changelog: add final entry
+   
+   The implementation-spec.md should now be a **complete as-built blueprint** —
+   someone reading it can understand, maintain, or reproduce the implementation.
 
 7. **Report**:
    - Summary of completed tasks
@@ -953,6 +975,21 @@ Equivalent to Windsurf `/evospec.tasks`.
    - Invariant coverage (% of invariants with tasks)
    - Suggested MVP scope
    - Estimated implementation phases
+
+8. **Create implementation-spec.md skeleton**:
+   Create `implementation-spec.md` in the spec directory with:
+   - Overview section: filled from spec.yaml (zone, tech stack from evospec.yaml)
+   - Component Architecture: empty table, ready to fill during implementation
+   - API Integration: pre-filled from traceability.endpoints in spec.yaml
+   - State Management: empty
+   - Configuration: pre-filled from known env vars
+   - Invariant Compliance: pre-filled table from spec.yaml invariant_impact.conflicts
+   - All other sections: skeleton headers only
+   - Changelog: first entry "Skeleton created from /evospec.tasks"
+   
+   Use the `implementation-spec.md` template from `specs/_templates/`.
+   
+   This document will be updated incrementally during `/evospec.implement`.
 
 **Rules**: NEVER generate tasks without reading the spec artifacts first Core zone: fitness function tasks BEFORE implementation tasks (TDD) Edge zone: prototype tasks BEFORE instrumentation tasks
 - Every invariant must map to at least one task

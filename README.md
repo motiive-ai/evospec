@@ -144,6 +144,7 @@ your-project/
 │   │       ├── discovery-spec.md   # Hypothesis, experiments, learning (edge/hybrid)
 │   │       ├── domain-contract.md  # Entities, invariants, fitness functions (core/hybrid)
 │   │       ├── tasks.md            # AI-executable implementation tasks
+│   │       ├── implementation-spec.md # As-built blueprint (for reproduction)
 │   │       └── checks/             # Executable guardrails
 │   └── domain/              # Living domain model
 │       ├── entities.yaml    # Domain entity registry (fields, relationships, invariants)

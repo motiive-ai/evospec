@@ -110,6 +110,21 @@ Within phases: T001 → T003 (sequential), T002 || T004 (parallel)
 - Suggested MVP scope
 - Estimated implementation phases
 
+8. **Create implementation-spec.md skeleton**:
+Create `implementation-spec.md` in the spec directory with:
+- Overview section: filled from spec.yaml (zone, tech stack from evospec.yaml)
+- Component Architecture: empty table, ready to fill during implementation
+- API Integration: pre-filled from traceability.endpoints in spec.yaml
+- State Management: empty
+- Configuration: pre-filled from known env vars
+- Invariant Compliance: pre-filled table from spec.yaml invariant_impact.conflicts
+- All other sections: skeleton headers only
+- Changelog: first entry "Skeleton created from /evospec.tasks"
+
+Use the `implementation-spec.md` template from `specs/_templates/`.
+
+This document will be updated incrementally during `/evospec.implement`.
+
 ## Task Generation From Contract
 
 | Contract Section | Generated Tasks |

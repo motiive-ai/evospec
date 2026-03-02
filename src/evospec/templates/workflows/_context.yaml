@@ -30,6 +30,7 @@ spec_structure: |
   │       ├── improvement-scope.md # Brief scope doc (improvements only)
   │       ├── bugfix-report.md    # Root cause + fix strategy (bugfixes only)
   │       ├── tasks.md            # Implementation tasks (AI work queue)
+  │       ├── implementation-spec.md # As-built blueprint (created by tasks, updated by implement)
   │       └── checks/             # Executable guardrails
   ├── domain/
   │   ├── entities.yaml           # Domain entity registry (fields, relationships, invariants)

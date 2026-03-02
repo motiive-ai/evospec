@@ -27,6 +27,7 @@ steps:
       - Read `tasks.md` for the complete task list and execution plan
       - Read `domain-contract.md` if it exists (for core/hybrid: entity definitions, state machines)
       - Read `discovery-spec.md` if it exists (for edge/hybrid: solution approach)
+      - Read `implementation-spec.md` if it exists (skeleton from Tasks workflow)
       - Read `evospec.yaml` for project-level configuration
 
   - id: 3
@@ -75,7 +76,7 @@ steps:
       - Contract tests at boundaries must pass before integration
 
   - id: 5
-    title: "Progress tracking"
+    title: "Progress tracking + implementation-spec updates"
     instructions: |
       - After each completed task, update `tasks.md` with `[X]`
       - Report progress after each phase:
@@ -85,6 +86,13 @@ steps:
         ```
       - If a task fails: report the error, suggest fix, ask user how to proceed
 
+      **Update implementation-spec.md after each phase**:
+      - §2 Component Architecture: add new components/modules created in this phase
+      - §3 API Integration: update endpoints used, error handling decisions
+      - §4 State Management: update state shape if it changed
+      - §9 Invariant Compliance: fill in File:Line references for enforced invariants
+      - §12 Changelog: add entry for the completed phase
+
   - id: 6
     title: "Post-implementation"
     instructions: |
@@ -92,6 +100,19 @@ steps:
       - Update spec status to "in-progress" or "completed"
       - If core zone: verify all fitness functions pass
       - Suggest running the Check workflow for full validation
+
+      **Finalize implementation-spec.md**:
+      - §1 Overview: verify tech stack table is complete, update status
+      - §5 Configuration: fill in all env vars and feature flags used
+      - §6 Error Handling: document all error scenarios discovered during implementation
+      - §7 Testing Strategy: list actual test files created
+      - §8 Deployment: fill in build commands and deploy target
+      - §10 Reproduction Instructions: verify setup/build/run/verify steps work
+      - §11 Known Limitations: document any tech debt or gaps
+      - §12 Changelog: add final entry
+
+      The implementation-spec.md should now be a **complete as-built blueprint** —
+      someone reading it can understand, maintain, or reproduce the implementation.
 
   - id: 7
     title: "Report"
