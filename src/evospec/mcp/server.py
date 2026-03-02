@@ -101,6 +101,28 @@ def get_context_map() -> str:
     return "No context map found."
 
 
+@mcp.resource("evospec://skills")
+def get_skills() -> str:
+    """Return project-specific implementation skills that AI agents should follow.
+
+    Skills are project-specific coding rules organized by category
+    (error-handling, testing, architecture, naming, dependencies, security).
+    Defined in specs/domain/skills.yaml.
+    """
+    from evospec.core.config import load_skills
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    skills = load_skills(project_root=root)
+    if not skills:
+        return "No implementation skills defined. Add skills to specs/domain/skills.yaml."
+
+    import yaml
+    return yaml.dump({"skills": skills}, default_flow_style=False, sort_keys=False)
+
+
 @mcp.resource("evospec://entities")
 def get_entity_registry() -> str:
     """[DEPRECATED — use evospec:get_entities tool] Return the domain entity registry."""

@@ -42,7 +42,7 @@ def _load_workflows() -> list[dict]:
 # Windsurf emitter
 # ---------------------------------------------------------------------------
 
-def _emit_windsurf(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
+def _emit_windsurf(workflows: list[dict], ctx: dict, dest: Path, *, skills: list[dict] | None = None) -> list[Path]:
     """Emit .windsurf/workflows/evospec.*.md files."""
     out_dir = dest / ".windsurf" / "workflows"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -130,6 +130,11 @@ def _emit_windsurf(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
                 lines.append(f"- {rule}")
             lines.append("")
 
+        # Project-specific skills (only in implement workflow)
+        if skills and wf["id"] == "implement":
+            lines.append(_format_skills_markdown(skills))
+            lines.append("")
+
         filename = f"evospec.{wf['id']}.md"
         out_path = out_dir / filename
         out_path.write_text("\n".join(lines))
@@ -142,7 +147,7 @@ def _emit_windsurf(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
 # Claude Code emitter
 # ---------------------------------------------------------------------------
 
-def _emit_claude(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
+def _emit_claude(workflows: list[dict], ctx: dict, dest: Path, *, skills: list[dict] | None = None) -> list[Path]:
     """Emit CLAUDE.md — single file with framework context + all workflow procedures."""
     lines: list[str] = []
 
@@ -348,6 +353,11 @@ def _emit_claude(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
         lines.append(f"- {kf['stage']} → {kf['guidance']}")
     lines.append("")
 
+    # Project-specific implementation skills
+    if skills:
+        lines.append(_format_skills_markdown(skills))
+        lines.append("")
+
     out_path = dest / "CLAUDE.md"
     out_path.write_text("\n".join(lines))
     return [out_path]
@@ -357,7 +367,7 @@ def _emit_claude(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
 # Cursor emitter
 # ---------------------------------------------------------------------------
 
-def _emit_cursor(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
+def _emit_cursor(workflows: list[dict], ctx: dict, dest: Path, *, skills: list[dict] | None = None) -> list[Path]:
     """Emit .cursor/rules/evospec.mdc — Cursor uses MDC format with frontmatter."""
     out_dir = dest / ".cursor" / "rules"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -443,6 +453,11 @@ def _emit_cursor(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
     for kf in ctx["knowledge_funnel"]:
         context_lines.append(f"- {kf['stage']} → {kf['guidance']}")
     context_lines.append("")
+
+    # Project-specific implementation skills
+    if skills:
+        context_lines.append(_format_skills_markdown(skills))
+        context_lines.append("")
 
     ctx_path = out_dir / "evospec.mdc"
     ctx_path.write_text("\n".join(context_lines))
@@ -610,14 +625,16 @@ def _build_skills_context_md(ctx: dict) -> str:
     return "\n".join(lines)
 
 
-def _emit_skills(workflows: list[dict], ctx: dict, dest: Path) -> list[Path]:
+def _emit_skills(workflows: list[dict], ctx: dict, dest: Path, *, skills: list[dict] | None = None) -> list[Path]:
     """Emit .agents/skills/evospec-*/SKILL.md + shared references/context.md."""
     skills_root = dest / ".agents" / "skills"
     skills_root.mkdir(parents=True, exist_ok=True)
     created = []
 
-    # Build shared context once
+    # Build shared context once (includes project skills if present)
     context_content = _build_skills_context_md(ctx)
+    if skills:
+        context_content += "\n" + _format_skills_markdown(skills) + "\n"
 
     for wf in workflows:
         skill_id = f"evospec-{wf['id']}"
@@ -715,6 +732,33 @@ EMITTERS = {
 }
 
 
+def _load_project_skills(dest: Path) -> list[dict]:
+    """Load implementation skills from the project's skills.yaml if it exists."""
+    from evospec.core.config import load_skills
+
+    return load_skills(project_root=dest)
+
+
+def _format_skills_markdown(skills: list[dict]) -> str:
+    """Format skills as markdown sections for injection into agent files."""
+    if not skills:
+        return ""
+    lines: list[str] = []
+    lines.append("## Implementation Skills")
+    lines.append("")
+    lines.append("These are project-specific rules. Follow them when implementing changes.")
+    lines.append("")
+    for skill in skills:
+        category = skill.get("category", "general")
+        heading = category.replace("-", " ").title()
+        lines.append(f"### {heading}")
+        lines.append("")
+        for rule in skill.get("rules", []):
+            lines.append(f"- {rule}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def generate_agents(dest: Path, platforms: list[str] | None = None) -> dict[str, list[Path]]:
     """Generate AI agent integration files for the specified platforms.
 
@@ -728,6 +772,7 @@ def generate_agents(dest: Path, platforms: list[str] | None = None) -> dict[str,
     platforms = platforms or list(PLATFORMS)
     ctx = _load_context()
     workflows = _load_workflows()
+    skills = _load_project_skills(dest)
 
     results: dict[str, list[Path]] = {}
     for platform in platforms:
@@ -735,7 +780,7 @@ def generate_agents(dest: Path, platforms: list[str] | None = None) -> dict[str,
         if emitter is None:
             console.print(f"[yellow]⚠ Unknown platform: {platform}[/yellow]")
             continue
-        created = emitter(workflows, ctx, dest)
+        created = emitter(workflows, ctx, dest, skills=skills)
         results[platform] = created
 
     return results

@@ -20,7 +20,8 @@ def cli() -> None:
 @click.option("--name", prompt="Project name", help="Name of the project.")
 @click.option("--description", default="", help="Short project description.")
 @click.option("--detect", is_flag=True, help="Auto-detect project stack and pre-fill reverse config.")
-def init(name: str, description: str, detect: bool) -> None:
+@click.option("--specs-dir", default=None, help="Custom spec folder path (e.g., 'evospec' or '.evospec'). Sets paths.specs and paths.domain.")
+def init(name: str, description: str, detect: bool, specs_dir: str | None) -> None:
     """Initialize EvoSpec in the current project."""
     from evospec.core.init import init_project
 
@@ -30,7 +31,7 @@ def init(name: str, description: str, detect: bool) -> None:
 
         detection = detect_project_stack(Path.cwd())
 
-    init_project(name=name, description=description, detection=detection)
+    init_project(name=name, description=description, detection=detection, specs_dir=specs_dir)
 
 
 @cli.command()
