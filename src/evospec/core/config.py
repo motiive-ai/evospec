@@ -28,6 +28,8 @@ DOMAIN_FILES = {
     "contexts.yaml": ("bounded_contexts",),
     "features.yaml": ("features",),
     "skills.yaml": ("skills",),
+    "api-contracts.yaml": ("api_contracts",),
+    "file-schemas.yaml": ("file_schemas",),
 }
 
 

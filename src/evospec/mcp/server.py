@@ -123,6 +123,52 @@ def get_skills() -> str:
     return yaml.dump({"skills": skills}, default_flow_style=False, sort_keys=False)
 
 
+@mcp.resource("evospec://api-catalog")
+def get_api_catalog() -> str:
+    """Return a browsable API endpoint catalog grouped by tag.
+
+    Lists all API contracts from specs/domain/api-contracts.yaml,
+    organized by tags for easy browsing by external consumers.
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    config = load_config(root)
+    contracts_data = config.get("api_contracts", {})
+    contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+
+    if not contracts:
+        return "No API contracts defined. Add them to specs/domain/api-contracts.yaml."
+
+    # Group by tag
+    by_tag: dict[str, list[dict]] = {}
+    for c in contracts:
+        tags = c.get("tags", ["untagged"])
+        for tag in tags:
+            by_tag.setdefault(tag, []).append(c)
+
+    lines = ["# API Catalog", ""]
+    lines.append(f"Total: {len(contracts)} endpoint(s) across {len(by_tag)} tag(s).")
+    lines.append("")
+
+    for tag, tag_contracts in sorted(by_tag.items()):
+        lines.append(f"## {tag}")
+        lines.append("")
+        for c in tag_contracts:
+            ep = c.get("endpoint", "?")
+            desc = c.get("description", "")
+            auth = c.get("auth", "")
+            lines.append(f"- **{ep}** — {desc}")
+            if auth:
+                lines.append(f"  - Auth: {auth}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 @mcp.resource("evospec://entities")
 def get_entity_registry() -> str:
     """[DEPRECATED — use evospec:get_entities tool] Return the domain entity registry."""
@@ -1200,6 +1246,208 @@ def get_invariants(context: str | None = None) -> dict:
     return {
         "text": text,
         "filter": {"context": context},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Consumer-facing tools — API contracts, file schemas, consumer context
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_api_contract(
+    endpoint: str | None = None,
+    tag: str | None = None,
+) -> dict:
+    """Get API contracts from specs/domain/api-contracts.yaml.
+
+    Returns structured API contracts with endpoint, params, request/response
+    schemas, auth, and tags. Use this when building integrations against
+    a team's API.
+
+    Args:
+        endpoint: Filter by endpoint path (substring match, case-insensitive)
+        tag: Filter by tag (e.g., 'orders', 'read')
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    contracts_data = config.get("api_contracts", {})
+    contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+    if isinstance(contracts_data, list):
+        contracts = contracts_data
+
+    if not contracts:
+        return {"contracts": [], "count": 0, "note": "No API contracts defined. Add them to specs/domain/api-contracts.yaml."}
+
+    # Filter
+    results = contracts
+    if endpoint:
+        ep_lower = endpoint.lower()
+        results = [c for c in results if ep_lower in (c.get("endpoint") or "").lower()]
+    if tag:
+        tag_lower = tag.lower()
+        results = [c for c in results if tag_lower in [t.lower() for t in c.get("tags", [])]]
+
+    return {
+        "contracts": results,
+        "count": len(results),
+        "total": len(contracts),
+        "filters": {"endpoint": endpoint, "tag": tag},
+    }
+
+
+@mcp.tool()
+def get_file_schema(
+    name: str | None = None,
+    fmt: str | None = None,
+) -> dict:
+    """Get file/response schemas from specs/domain/file-schemas.yaml.
+
+    Returns structured file schemas with name, format, structure, and examples.
+    Use this when parsing files or API responses from a service.
+
+    Args:
+        name: Filter by schema name (substring match, case-insensitive)
+        fmt: Filter by format (e.g., 'json', 'csv', 'xml')
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    schemas_data = config.get("file_schemas", {})
+    schemas = schemas_data.get("schemas", []) if isinstance(schemas_data, dict) else []
+    if isinstance(schemas_data, list):
+        schemas = schemas_data
+
+    if not schemas:
+        return {"schemas": [], "count": 0, "note": "No file schemas defined. Add them to specs/domain/file-schemas.yaml."}
+
+    results = schemas
+    if name:
+        name_lower = name.lower()
+        results = [s for s in results if name_lower in (s.get("name") or "").lower()]
+    if fmt:
+        fmt_lower = fmt.lower()
+        results = [s for s in results if fmt_lower == (s.get("format") or "").lower()]
+
+    return {
+        "schemas": results,
+        "count": len(results),
+        "total": len(schemas),
+        "filters": {"name": name, "format": fmt},
+    }
+
+
+@mcp.tool()
+def get_consumer_context(intent: str) -> dict:
+    """Get combined context for an external consumer based on their intent.
+
+    Combines API contracts, file schemas, domain entities, and glossary
+    to give an AI agent everything it needs to generate correct integration
+    code on the first try.
+
+    Args:
+        intent: Natural language description of what the consumer wants to do
+                (e.g., 'download and parse order exports', 'create a new order')
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    intent_lower = intent.lower()
+    intent_words = set(intent_lower.split())
+
+    # Search API contracts by keyword overlap
+    contracts_data = config.get("api_contracts", {})
+    all_contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+    matching_contracts = []
+    for c in all_contracts:
+        score = 0
+        ep = (c.get("endpoint") or "").lower()
+        desc = (c.get("description") or "").lower()
+        tags = [t.lower() for t in c.get("tags", [])]
+        # Score: endpoint keyword match, description match, tag match
+        for word in intent_words:
+            if word in ep:
+                score += 2
+            if word in desc:
+                score += 2
+            if word in tags:
+                score += 3
+        if score > 0:
+            matching_contracts.append({"contract": c, "relevance": score})
+    matching_contracts.sort(key=lambda x: x["relevance"], reverse=True)
+
+    # Search file schemas by keyword overlap
+    schemas_data = config.get("file_schemas", {})
+    all_schemas = schemas_data.get("schemas", []) if isinstance(schemas_data, dict) else []
+    matching_schemas = []
+    for s in all_schemas:
+        score = 0
+        name = (s.get("name") or "").lower()
+        desc = (s.get("description") or "").lower()
+        fmt = (s.get("format") or "").lower()
+        for word in intent_words:
+            if word in name:
+                score += 2
+            if word in desc:
+                score += 2
+            if word in fmt:
+                score += 1
+        if score > 0:
+            matching_schemas.append({"schema": s, "relevance": score})
+    matching_schemas.sort(key=lambda x: x["relevance"], reverse=True)
+
+    # Find relevant entities
+    entities = config.get("domain", {}).get("entities", [])
+    matching_entities = []
+    for e in entities:
+        name = (e.get("name") or "").lower()
+        ctx = (e.get("context") or "").lower()
+        desc = (e.get("description") or "").lower()
+        for word in intent_words:
+            if word in name or word in ctx or word in desc:
+                matching_entities.append(e.get("name"))
+                break
+
+    # Get glossary terms
+    glossary_path = root / "specs" / "domain" / "glossary.md"
+    glossary_excerpt = ""
+    if glossary_path.exists():
+        glossary_text = glossary_path.read_text()
+        # Extract rows that match intent keywords
+        relevant_lines = []
+        for line in glossary_text.split("\n"):
+            line_lower = line.lower()
+            for word in intent_words:
+                if len(word) > 3 and word in line_lower:
+                    relevant_lines.append(line)
+                    break
+        if relevant_lines:
+            glossary_excerpt = "\n".join(relevant_lines[:10])
+
+    return {
+        "intent": intent,
+        "api_contracts": [m["contract"] for m in matching_contracts[:5]],
+        "file_schemas": [m["schema"] for m in matching_schemas[:5]],
+        "related_entities": matching_entities[:10],
+        "glossary_excerpt": glossary_excerpt,
+        "guidance": (
+            "Use the API contracts for endpoint details, params, and response schemas. "
+            "Use file schemas for parsing downloaded files or structured responses. "
+            "Cross-reference entity names with the domain glossary for correct terminology."
+        ),
     }
 
 

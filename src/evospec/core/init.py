@@ -249,6 +249,60 @@ def _create_domain_stubs(domain_dir: Path) -> None:
         )
         console.print(f"[green]✓[/green] Created {features_path.relative_to(Path.cwd())}")
 
+    api_contracts_path = domain_dir / "api-contracts.yaml"
+    if not api_contracts_path.exists():
+        api_contracts_path.write_text(
+            "# API Contracts\n"
+            "# Structured API contracts for external consumers and AI agents.\n"
+            "# Served via MCP as evospec://api-catalog and get_api_contract() tool.\n"
+            "#\n"
+            "# Example:\n"
+            "# contracts:\n"
+            "#   - endpoint: \"GET /api/orders/{orderId}\"\n"
+            "#     description: \"Get order details\"\n"
+            "#     params:\n"
+            "#       - name: orderId\n"
+            "#         in: path\n"
+            "#         type: String\n"
+            "#         format: UUID\n"
+            "#         required: true\n"
+            "#     response:\n"
+            "#       200:\n"
+            "#         fields:\n"
+            "#           - name: orderId\n"
+            "#             type: String\n"
+            "#           - name: status\n"
+            "#             type: OrderStatus\n"
+            "#     auth: \"bearer token\"\n"
+            "#     tags: [\"orders\", \"read\"]\n"
+            "contracts: []\n"
+        )
+        console.print(f"[green]✓[/green] Created {api_contracts_path.relative_to(Path.cwd())}")
+
+    file_schemas_path = domain_dir / "file-schemas.yaml"
+    if not file_schemas_path.exists():
+        file_schemas_path.write_text(
+            "# File Schemas\n"
+            "# Describes file formats and response structures for external consumers.\n"
+            "# Served via MCP as get_file_schema() tool.\n"
+            "#\n"
+            "# Example:\n"
+            "# schemas:\n"
+            "#   - name: \"OrderExport\"\n"
+            "#     format: json\n"
+            "#     description: \"JSON export of order data\"\n"
+            "#     version: \"v1\"\n"
+            "#     structure:\n"
+            "#       - name: orderId\n"
+            "#         type: String\n"
+            "#       - name: items\n"
+            "#         type: List<LineItem>\n"
+            "#     example: |\n"
+            "#       { \"orderId\": \"a1b2c3d4\", \"items\": [...] }\n"
+            "schemas: []\n"
+        )
+        console.print(f"[green]✓[/green] Created {file_schemas_path.relative_to(Path.cwd())}")
+
     skills_path = domain_dir / "skills.yaml"
     if not skills_path.exists():
         skills_path.write_text(

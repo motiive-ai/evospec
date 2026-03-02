@@ -137,6 +137,11 @@ def run_checks(strict: bool = False) -> None:
     w_ent = _check_entity_registry(spec_dirs, config, root)
     warnings += w_ent
 
+    # API contracts and file schemas validation
+    e_api, w_api = _check_api_contracts(config)
+    errors += e_api
+    warnings += w_api
+
     # Cross-spec invariant impact check
     e, w = _check_cross_spec_invariants(spec_dirs, root)
     errors += e
@@ -401,6 +406,94 @@ def _check_general(spec: dict, spec_dir: Path) -> tuple[int, int]:
         warnings += 1
 
     return 0, warnings
+
+
+def _check_api_contracts(config: dict) -> tuple[int, int]:
+    """Validate api-contracts.yaml and file-schemas.yaml structure and cross-references.
+
+    CONSUMER-MCP-001: api-contracts.yaml validates (endpoint, params, response required)
+    CONSUMER-MCP-002: file-schemas.yaml validates (name, format, structure required)
+    CONSUMER-MCP-003: Entity types in api-contracts.yaml exist in entities.yaml
+    """
+    errors = 0
+    warnings = 0
+
+    # Validate API contracts (CONSUMER-MCP-001)
+    contracts_data = config.get("api_contracts", {})
+    contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+    if isinstance(contracts_data, list):
+        contracts = contracts_data
+
+    if contracts:
+        console.print("[bold]API contracts validation[/bold]")
+        console.print()
+        for c in contracts:
+            ep = c.get("endpoint", "")
+            if not ep:
+                console.print("  [red]✗ API contract missing 'endpoint' field[/red]")
+                errors += 1
+                continue
+            issues = []
+            if not c.get("response"):
+                issues.append("missing 'response'")
+            if not issues:
+                console.print(f"  [green]✓[/green] {ep}")
+            else:
+                console.print(f"  [yellow]⚠ {ep}: {', '.join(issues)}[/yellow]")
+                warnings += len(issues)
+
+        # Cross-reference entity types against entities.yaml (CONSUMER-MCP-003)
+        entities = config.get("domain", {}).get("entities", [])
+        if entities:
+            entity_names = {e.get("name", "").lower() for e in entities}
+            for c in contracts:
+                ep = c.get("endpoint", "?")
+                # Check response field types
+                for status, resp in (c.get("response") or {}).items():
+                    for field in (resp.get("fields") or []):
+                        ftype = field.get("type", "")
+                        # Extract base type (strip List<>, Optional<>, etc.)
+                        base_type = ftype.replace("List<", "").replace("Optional<", "").rstrip(">")
+                        if base_type and base_type[0].isupper() and base_type.lower() not in entity_names:
+                            # Only warn for PascalCase types that look like entities
+                            if base_type not in ("String", "Int", "Integer", "Float", "Decimal",
+                                                  "Boolean", "Bool", "Date", "DateTime", "UUID",
+                                                  "Object", "Any"):
+                                console.print(
+                                    f"    [yellow]⚠ {ep}: response type '{ftype}' "
+                                    f"references unknown entity '{base_type}'[/yellow]"
+                                )
+                                warnings += 1
+        console.print()
+
+    # Validate file schemas (CONSUMER-MCP-002)
+    schemas_data = config.get("file_schemas", {})
+    schemas = schemas_data.get("schemas", []) if isinstance(schemas_data, dict) else []
+    if isinstance(schemas_data, list):
+        schemas = schemas_data
+
+    if schemas:
+        console.print("[bold]File schemas validation[/bold]")
+        console.print()
+        for s in schemas:
+            name = s.get("name", "")
+            if not name:
+                console.print("  [red]✗ File schema missing 'name' field[/red]")
+                errors += 1
+                continue
+            issues = []
+            if not s.get("format"):
+                issues.append("missing 'format'")
+            if not s.get("structure"):
+                issues.append("missing 'structure'")
+            if not issues:
+                console.print(f"  [green]✓[/green] {name} ({s.get('format', '?')})")
+            else:
+                console.print(f"  [yellow]⚠ {name}: {', '.join(issues)}[/yellow]")
+                warnings += len(issues)
+        console.print()
+
+    return errors, warnings
 
 
 def _check_entity_registry(
