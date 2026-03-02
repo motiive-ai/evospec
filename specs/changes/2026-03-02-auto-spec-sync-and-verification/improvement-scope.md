@@ -1,4 +1,4 @@
-# Improvement Scope: Auto-Spec Sync & Verification (evospec sync, verify, capture --from-history)
+# Improvement Scope: Auto-Spec Sync & Verification (evospec sync + evospec verify)
 
 > Zone: **hybrid** | Type: **improvement** | Status: **draft**
 
@@ -6,11 +6,11 @@
 
 ## What Needs to Change
 
-Three interconnected problems prevent specs from staying trustworthy: (1) **Drift** — teams commit code without updating specs, so entities.yaml and invariants silently become outdated. (2) **No baseline** — teams adopting EvoSpec on existing codebases have no way to generate specs from years of code history. (3) **No verification** — there's no way to check if a spec accurately describes what's actually implemented. This change adds three new CLI commands: `evospec sync` (drift detection), `evospec verify` (spec-vs-code accuracy), and `evospec capture --from-history` (retroactive spec generation from git history).
+Two problems prevent specs from staying trustworthy: (1) **Drift** — teams commit code without updating specs, so entities.yaml and invariants silently become outdated. (2) **No verification** — there's no way to check if a spec accurately describes what's actually implemented. This change adds two new CLI commands: `evospec sync` (drift detection from git diffs) and `evospec verify` (spec-vs-code accuracy scoring). Note: retroactive spec generation from git history (`capture --from-history`) is a separate edge experiment — it requires hypothesis validation before implementation.
 
 ## Why Now
 
-These are the **biggest adoption blockers** for EvoSpec. Teams with existing codebases won't adopt if they have to manually spec years of work. Teams that do adopt will see specs drift within weeks. And AI agents trusting stale MCP context will generate wrong code. Together, these three commands make specs self-maintaining.
+Spec drift is the **silent killer of spec tools**. Teams that adopt EvoSpec will see specs drift within weeks if there's no automated detection. AI agents trusting stale MCP context generate wrong code. `sync` detects drift early; `verify` proves specs are trustworthy. Together, these two commands make specs self-maintaining.
 
 ## Scope
 
@@ -35,20 +35,12 @@ These are the **biggest adoption blockers** for EvoSpec. Teams with existing cod
 - `--format json|markdown` for CI integration and PR comments
 - Configurable minimum scores in evospec.yaml
 
-**Feature 3: `evospec capture --from-history`** — Retroactive spec generation
-- Git history mining with feature cluster detection (co-changed files + commit messages)
-- Retroactive spec generation with `retroactive: true` flag
-- Domain model bootstrap (entities.yaml, contexts.yaml, glossary.md from history)
-- Glossary mining from code identifiers, enum values, commit messages
-- `--interactive` mode walks user through each cluster
-- `--since` flag limits analysis window
-- `--dry-run` shows what would be generated
-
 ### Out of Scope
 
 - Real-time file watching (sync is on-demand or CI-triggered)
 - Auto-fixing drifted specs (sync reports, human reviews)
 - Deep code analysis for verification (uses structural matching; deep analysis is the deep-reverse-engineering change)
+- Retroactive spec generation from git history (`capture --from-history`) — separate edge experiment
 
 ## Affected Areas
 
@@ -57,17 +49,15 @@ These are the **biggest adoption blockers** for EvoSpec. Teams with existing cod
 **Tables**: None
 
 **Modules**:
-- `evospec.cli.main` — new `sync`, `verify` commands; enhanced `capture`
+- `evospec.cli.main` — new `sync`, `verify` commands
 - `evospec.core.sync` — GitDiffAnalyzer, DriftScorer, DraftSpecGenerator
 - `evospec.core.verify` — EntityVerifier, APIVerifier, InvariantVerifier, ContextVerifier
-- `evospec.core.capture` — FeatureClusterDetector, GlossaryMiner (enhanced)
 - `evospec.core.config` — verification thresholds
 - `evospec.mcp.server` — `evospec://drift-report`, `evospec://verification` resources; `check_drift()`, `verify_spec()` tools
 
 **Bounded Contexts**:
 - `spec-engine` — drift scoring, verification pipeline
 - `reverse-engineering` — code analysis for verification
-- `domain-management` — retroactive domain model generation
 
 ## Invariant Impact
 
@@ -94,16 +84,6 @@ No conflicts. Fully additive — new commands alongside existing ones.
 - [ ] `--strict` exits non-zero on any failure
 - [ ] `--format json|markdown` for CI integration
 - [ ] Configurable minimum scores in evospec.yaml
-
-### evospec capture --from-history
-- [ ] Analyzes full git history and detects feature clusters
-- [ ] Feature clusters grouped by co-changed files + commit message patterns
-- [ ] Each cluster generates a retroactive spec (`retroactive: true`)
-- [ ] Domain model bootstrapped from history + reverse engineering
-- [ ] Glossary mined from code identifiers, enum values, commit messages
-- [ ] `--interactive` mode walks user through each cluster
-- [ ] `--since` limits history analysis
-- [ ] Works on projects with 0 existing specs
 
 ### MCP Integration
 - [ ] `evospec://drift-report` resource returns current drift score
@@ -152,32 +132,9 @@ Invariant enforcement: 80% (4/5)
 Overall score: 80%
 ```
 
-### Example: Capture from History
-
-```
-$ evospec capture --from-history --since 2025-01-01
-
-Analyzing 347 commits (8 contributors, 14 months)...
-
-Detected feature clusters:
-  📦 "Order Processing" (78 commits, 2025-01 → 2025-06)
-     Entities: Order, LineItem, Payment
-     Suggested zone: core
-
-  📦 "Product Catalog" (45 commits, 2025-03 → 2025-09)
-     Entities: Product, Category
-     Suggested zone: core
-
-  📦 "Search & Filtering" (22 commits, 2025-07 → 2025-10)
-     Entities: SearchIndex
-     Suggested zone: edge
-
-Generated: 3 retroactive specs + domain model baseline
-```
-
 ## Risks & Rollback
 
-**Risk level**: medium — git analysis and code parsing can produce false positives
+**Risk level**: low-medium — git diff parsing and structural matching can produce false positives
 
 **Rollback plan**: Remove new commands; no changes to existing commands or spec format
 
@@ -187,4 +144,3 @@ Generated: 3 retroactive specs + domain model baseline
 
 - ADR: Drift scoring uses structural comparison (field names, types) not semantic — keeps it deterministic and fast
 - ADR: Verification reports are informational, not auto-fixing — human reviews before accepting suggestions
-- ADR: Feature cluster detection uses file co-change graph with community detection — no ML dependency, deterministic results

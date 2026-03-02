@@ -35,7 +35,7 @@ invariant_impact:
   entities_touched:
     - "ProjectConfig"
     - "Skill"
-    - "AgentFile"
+    - "CanonicalWorkflow"
   contexts_touched:
     - "cli"
     - "domain-management"

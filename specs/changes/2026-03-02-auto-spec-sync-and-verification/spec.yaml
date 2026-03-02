@@ -2,7 +2,7 @@
 # Schema: https://evospec.dev/schemas/spec.schema.json
 
 id: "auto-spec-sync-and-verification"
-title: "Auto-Spec Sync & Verification (evospec sync, verify, capture --from-history)"
+title: "Auto-Spec Sync & Verification (evospec sync + evospec verify)"
 zone: "hybrid"  # edge | hybrid | core
 change_type: "improvement"  # experiment | improvement | bugfix
 status: "draft"     # draft | proposed | accepted | in-progress | completed | abandoned | superseded
@@ -20,7 +20,7 @@ classification:
   is_hypothesis: false
   reversibility: "trivial"  # trivial | moderate | difficult | irreversible
   risk_level: "medium"          # low | medium | high | critical
-  rationale: "Three new CLI commands (sync, verify, capture --from-history) that analyze git diffs, verify spec accuracy against implementation, and retroactively generate specs from history. Crosses spec-engine → reverse-engineering → domain-management. Additive — no changes to existing commands."
+  rationale: "Two new CLI commands (sync, verify) that analyze git diffs to detect spec drift and verify spec accuracy against implementation. Crosses spec-engine → reverse-engineering → domain-management. Additive — no changes to existing commands. Note: capture --from-history is a separate edge experiment."
 
 # --- Invariant Impact (auto-populated by `evospec classify` or MCP check_invariant_impact) ---
 # Shows which existing core invariants this change may affect.
@@ -33,10 +33,9 @@ invariant_impact:
     #   resolution: ""         # exempt | evolve | shadow | redesign
     #   notes: ""
   entities_touched:
-    - "SpecYaml"
-    - "Entity"
+    - "ChangeSpec"
+    - "DomainEntity"
     - "Invariant"
-    - "FeatureCluster"
     - "DriftReport"
     - "VerificationReport"
   contexts_touched:
@@ -62,11 +61,13 @@ strategic_fit:
   capability_strengthened: "Spec trustworthiness and adoption friction — biggest barriers to EvoSpec adoption"
 
 # --- Invariants (required for core) ---
-invariants: []
-  # - id: "INV-001"
-  #   statement: "Every Order must have at least one LineItem"
-  #   enforcement: "test"
-  #   fitness_function: "tests/invariants/test_order_integrity.py"
+invariants:
+  - id: "SYNC-001"
+    statement: "evospec sync MUST NOT modify spec files without explicit --generate flag"
+    enforcement: "api-validation"
+  - id: "SYNC-002"
+    statement: "evospec verify MUST produce deterministic results for the same codebase + specs"
+    enforcement: "test"
 
 # --- Fitness Functions (required for core) ---
 fitness_functions: []
@@ -87,7 +88,6 @@ traceability:
     - "evospec.cli.main"
     - "evospec.core.sync"
     - "evospec.core.verify"
-    - "evospec.core.capture"
     - "evospec.core.config"
     - "evospec.mcp.server"
   events: []
@@ -144,7 +144,7 @@ discovery:
 # --- Design Thinking (edge/hybrid) ---
 design_thinking:
   current_phase: "define"
-  problem_statement: "Teams adopting EvoSpec on existing codebases face two problems: (1) no way to generate a spec baseline from years of code history, and (2) specs silently drift from implementation when teams commit without updating specs. AI agents trusting stale MCP context get wrong information."
+  problem_statement: "Specs silently drift from implementation when teams commit code without updating specs. AI agents trusting stale MCP context get wrong information. There's no way to check if a spec accurately describes what's actually implemented."
   ideas_explored: 5
   empathy_artifacts: []
   prototypes: []

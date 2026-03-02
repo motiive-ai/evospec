@@ -35,7 +35,7 @@ invariant_impact:
   entities_touched:
     - "APIEndpoint"
     - "Invariant"
-    - "Entity"
+    - "DomainEntity"
     - "StateMachine"
     - "ExternalDependency"
   contexts_touched:

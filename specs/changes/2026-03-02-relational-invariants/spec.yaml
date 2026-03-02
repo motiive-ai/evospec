@@ -34,8 +34,8 @@ invariant_impact:
     #   notes: ""
   entities_touched:
     - "Invariant"
-    - "SpecYaml"
-    - "Entity"
+    - "ChangeSpec"
+    - "DomainEntity"
   contexts_touched:
     - "spec-engine"
     - "domain-management"

@@ -40,7 +40,6 @@ invariant_impact:
   contexts_touched:
     - "domain-management"
     - "agent-integration"
-    - "mcp-server"
   reviewed: true
 
 # --- Domain (required for core, optional for hybrid) ---
@@ -60,11 +59,16 @@ strategic_fit:
   capability_strengthened: "MCP usefulness for external consumers — currently internal-only"
 
 # --- Invariants (required for core) ---
-invariants: []
-  # - id: "INV-001"
-  #   statement: "Every Order must have at least one LineItem"
-  #   enforcement: "test"
-  #   fitness_function: "tests/invariants/test_order_integrity.py"
+invariants:
+  - id: "CONSUMER-MCP-001"
+    statement: "api-contracts.yaml MUST validate against schema (endpoint, params, response required)"
+    enforcement: "schema-validation"
+  - id: "CONSUMER-MCP-002"
+    statement: "file-schemas.yaml MUST validate against schema (name, format, structure required)"
+    enforcement: "schema-validation"
+  - id: "CONSUMER-MCP-003"
+    statement: "Entity types referenced in api-contracts.yaml MUST exist in entities.yaml"
+    enforcement: "ci-check"
 
 # --- Fitness Functions (required for core) ---
 fitness_functions: []
