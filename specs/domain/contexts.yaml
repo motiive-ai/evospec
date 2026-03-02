@@ -1,0 +1,26 @@
+# Bounded Contexts — EvoSpec
+
+- name: "spec-engine"
+  owner: "evospec-core"
+  type: "core"
+  description: "The heart of EvoSpec. Manages change specs, invariants, fitness functions, classification, checking, and the discovery loop. Owns ChangeSpec, Invariant, FitnessFunction, Assumption, Experiment, ADR, and ProjectConfig entities."
+
+- name: "domain-management"
+  owner: "evospec-core"
+  type: "core"
+  description: "Manages the living domain model: entity registry, bounded contexts, features, glossary, and context map. Split into dedicated files under specs/domain/. Owns Feature, DomainEntity, and BoundedContext entities."
+
+- name: "agent-integration"
+  owner: "evospec-core"
+  type: "supporting"
+  description: "Generates AI agent integration files from canonical workflow specs. Emits Windsurf workflows, Claude Code CLAUDE.md, and Cursor rules. Owns CanonicalWorkflow entity. Also runs the MCP server for programmatic agent access."
+
+- name: "reverse-engineering"
+  owner: "evospec-core"
+  type: "supporting"
+  description: "Scans existing codebases to extract domain information: API endpoints (reverse api), DB models (reverse db), CLI/module structure (reverse cli), and cross-system dependencies (reverse deps). Outputs feed into specs/domain/ and spec artifacts."
+
+- name: "cli"
+  owner: "evospec-core"
+  type: "generic"
+  description: "Click-based CLI layer. Thin wrapper over core modules. 24 commands across 5 groups: root, adr, reverse, feature, generate."

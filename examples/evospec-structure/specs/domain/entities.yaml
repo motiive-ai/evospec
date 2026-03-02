@@ -1,0 +1,68 @@
+# Domain Entity Registry — E-Commerce Platform
+
+- name: "Order"
+  context: "orders"
+  table: "orders"
+  aggregate_root: true
+  description: "A customer purchase. Aggregate root for order lifecycle. Always scoped to a tenant."
+  fields:
+    - name: "id"
+      type: "UUID"
+    - name: "tenant_id"
+      type: "UUID"
+    - name: "customer_id"
+      type: "UUID"
+    - name: "status"
+      type: "String"
+      constraints: "draft | submitted | processing | shipped | delivered | cancelled"
+    - name: "total_amount"
+      type: "Decimal"
+    - name: "currency"
+      type: "String"
+  relationships:
+    - target: "LineItem"
+      type: "one-to-many"
+  invariants:
+    - "ORD-INV-001"
+    - "ORD-INV-002"
+    - "ORD-INV-003"
+
+- name: "LineItem"
+  context: "orders"
+  table: "line_items"
+  aggregate_root: false
+  description: "A single product line within an order. Quantity must be positive."
+  fields:
+    - name: "id"
+      type: "UUID"
+    - name: "order_id"
+      type: "UUID"
+    - name: "product_id"
+      type: "UUID"
+    - name: "quantity"
+      type: "Integer"
+      constraints: "must be > 0"
+    - name: "unit_price"
+      type: "Decimal"
+  relationships:
+    - target: "Order"
+      type: "many-to-one"
+  invariants:
+    - "ORD-INV-001"
+
+- name: "Product"
+  context: "catalog"
+  table: "products"
+  aggregate_root: true
+  description: "A product in the catalog with pricing and stock count."
+  fields:
+    - name: "id"
+      type: "UUID"
+    - name: "name"
+      type: "String"
+    - name: "price"
+      type: "Decimal"
+    - name: "stock_count"
+      type: "Integer"
+  relationships: []
+  invariants: []

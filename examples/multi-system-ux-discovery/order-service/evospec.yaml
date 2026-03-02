@@ -1,0 +1,47 @@
+# EvoSpec Configuration — Order Service
+# This is a standalone evospec project for the order microservice.
+# Other repos reference this via upstreams[].
+
+project:
+  name: "order-service"
+  description: "Order lifecycle management — cart to delivery"
+  version: "1.0.0"
+
+paths:
+  specs: "specs/changes"
+  templates: "specs/_templates"
+  adrs: "docs/adr"
+  domain: "specs/domain"
+  checks: "specs/checks"
+
+schema:
+  version: "1.0.0"
+
+classification:
+  core_triggers:
+    - touches_persistence
+    - touches_auth
+    - touches_billing
+  default_reversibility: "difficult"
+
+teams:
+  - name: "commerce-platform"
+    type: "stream-aligned"
+    bounded_contexts: ["orders"]
+
+upstreams: []
+
+fitness_functions:
+  run_command: "mvn test -pl fitness"
+  test_runner: "junit"
+  ci_gate: true
+
+reverse:
+  framework: "spring"
+  source_dirs:
+    - "src"
+
+strategy:
+  winning_aspiration: "Reliable order processing with sub-second response times"
+  where_to_play: "B2C e-commerce checkout and fulfillment"
+  how_to_win: "Strong invariants, zero data inconsistency, fast state transitions"

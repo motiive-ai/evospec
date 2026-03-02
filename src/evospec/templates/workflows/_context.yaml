@@ -1,0 +1,221 @@
+# EvoSpec Canonical Context — shared across all AI agent platforms
+# This file is the single source of truth for framework description,
+# zone classification, MCP tools/resources, CLI commands, etc.
+# Generator reads this + individual workflow YAMLs to emit platform-specific files.
+
+framework:
+  name: "EvoSpec"
+  principle: "Progressive specs at the edge. Contracts in the core."
+  description: "A spec-driven delivery toolkit that classifies changes as edge/hybrid/core and applies proportional governance."
+
+layers:
+  - name: "Discovery Layer"
+    zone: "edge"
+    knowledge_stage: "Mystery → Heuristic"
+    approach: "Design Thinking + Continuous Discovery"
+    artifact: "discovery-spec.md"
+  - name: "Core Engine"
+    zone: "core"
+    knowledge_stage: "Heuristic → Algorithm"
+    approach: "DDD + Evolutionary Architecture"
+    artifact: "domain-contract.md"
+
+spec_structure: |
+  specs/
+  ├── changes/                    # Change specifications
+  │   └── YYYY-MM-DD-<slug>/
+  │       ├── spec.yaml           # Machine-readable classification + metadata
+  │       ├── discovery-spec.md   # Hypothesis, experiments, learning (edge/hybrid)
+  │       ├── domain-contract.md  # Entities, invariants, fitness functions (core/hybrid)
+  │       ├── improvement-scope.md # Brief scope doc (improvements only)
+  │       ├── bugfix-report.md    # Root cause + fix strategy (bugfixes only)
+  │       ├── tasks.md            # Implementation tasks (AI work queue)
+  │       ├── implementation-spec.md # As-built blueprint (created by tasks, updated by implement)
+  │       └── checks/             # Executable guardrails
+  ├── domain/
+  │   ├── entities.yaml           # Domain entity registry (fields, relationships, invariants)
+  │   ├── contexts.yaml           # Bounded contexts (owner, type, description)
+  │   ├── features.yaml           # Feature lifecycle registry
+  │   ├── glossary.md             # Ubiquitous language
+  │   └── context-map.md          # Bounded context relationships
+  docs/
+  └── adr/                        # Architecture Decision Records
+
+zones:
+  - name: "edge"
+    required_artifacts: "discovery-spec.md, spec.yaml with discovery section"
+    guardrails: "Metrics + kill criteria"
+  - name: "hybrid"
+    required_artifacts: "discovery-spec.md + domain-contract.md (minimal)"
+    guardrails: "Contract tests at boundaries"
+  - name: "core"
+    required_artifacts: "domain-contract.md, spec.yaml with invariants + fitness_functions"
+    guardrails: "Fitness functions + CI gates"
+
+entry_points:
+  - type: "Experiment"
+    when: "Unknown if users want it"
+    artifacts: "discovery-spec.md, spec.yaml"
+  - type: "Improvement"
+    when: "Known need, known solution"
+    artifacts: "improvement-scope.md, spec.yaml, tasks.md"
+  - type: "Bug fix"
+    when: "Something is broken"
+    artifacts: "bugfix-report.md, spec.yaml, tasks.md"
+
+invariant_resolutions:
+  - id: "exempt"
+    description: "Experiment behind a feature flag, don't touch the invariant"
+  - id: "evolve"
+    description: "Propose INV-001-v2 with migration path + new fitness function"
+  - id: "shadow"
+    description: "Validate need via interviews/analytics BEFORE touching schema"
+  - id: "redesign"
+    description: "Change approach to avoid the conflict"
+
+entity_registry:
+  description: "specs/domain/entities.yaml is the canonical, machine-readable entity catalog."
+  location: "specs/domain/entities.yaml"
+  fields: "name, context, table, aggregate_root, description, fields (name/type/constraints), relationships (target/type), invariants (IDs)"
+  mcp_resource: "evospec://entities"
+  populate_command: "evospec reverse db"
+  validation: "evospec check validates entities_touched against registered entities"
+
+domain_files:
+  description: "Domain model is split into dedicated files under specs/domain/ to keep evospec.yaml lean."
+  files:
+    - "specs/domain/entities.yaml — entity registry (fields, relationships, invariants)"
+    - "specs/domain/contexts.yaml — bounded contexts (owner, type, description)"
+    - "specs/domain/features.yaml — feature lifecycle (status, knowledge stage)"
+    - "specs/domain/glossary.md — ubiquitous language definitions"
+    - "specs/domain/context-map.md — bounded context relationships"
+  note: "For backwards compatibility, entities/contexts/features in evospec.yaml are still read but domain files take precedence."
+
+cross_repo:
+  description: "Each service has its own evospec.yaml. Downstream repos reference upstream repos via upstreams[] in evospec.yaml."
+  mechanism: "Published contracts (file-based). Each repo's specs/domain/ files are the contract."
+  config: |
+    # In downstream repo's evospec.yaml:
+    upstreams:
+      - name: "order-service"
+        path: "../order-service"       # relative path to sibling repo
+      - name: "inventory-service"
+        path: "../inventory-service"
+  what_it_enables:
+    - "evospec check includes upstream invariants in cross-spec checks"
+    - "evospec://entities MCP resource includes upstream entities"
+    - "check_invariant_impact() checks upstream invariants too"
+    - "AI agents see the full domain picture across repos"
+
+mcp:
+  start_command: "evospec serve"
+  tools:
+    - "list_specs() — list all specs with zone, status, artifacts"
+    - "read_spec(spec_path) — read a spec with all artifacts"
+    - "check_spec(spec_path?) — run validation checks"
+    - "classify_change(...) — classify a change into edge/hybrid/core"
+    - "check_invariant_impact(entities, contexts, description) — safety net"
+    - "get_tasks(spec_path) — parse tasks.md into structured data"
+    - "update_task(spec_path, task_id, done) — mark tasks complete"
+    - "list_features() — list registered features with lifecycle status"
+    - "get_discovery_status(spec_path) — assumptions, experiments, health, deadlines"
+    - "record_experiment(spec_path, assumption_id, ...) — log experiment results"
+    - "update_assumption(spec_path, assumption_id, ...) — update assumption status"
+    - "run_fitness_functions(spec_path?) — execute fitness function tests"
+  resources:
+    - "evospec://config — project configuration"
+    - "evospec://glossary — ubiquitous language"
+    - "evospec://context-map — bounded context relationships"
+    - "evospec://invariants — all invariants from core/hybrid specs (the safety net)"
+    - "evospec://entities — domain entity registry (canonical entity catalog)"
+  prompts:
+    - "discover_feature(description) — discovery spec generation prompt"
+    - "domain_contract(bounded_context) — domain contract generation prompt"
+
+cli_commands:
+  - "evospec init \"project-name\"              # Initialize project"
+  - "evospec new \"change title\" --zone edge   # Create new spec"
+  - "evospec check                            # Validate all specs"
+  - "evospec check --run-fitness              # Validate + execute fitness functions"
+  - "evospec fitness                          # Run fitness functions independently"
+  - "evospec reverse api --framework fastapi  # Reverse-engineer API endpoints"
+  - "evospec reverse db                       # Reverse-engineer DB entities + generate entity registry YAML"
+  - "evospec reverse cli                      # Reverse-engineer CLI/module structure"
+  - "evospec reverse deps --source src/       # Detect cross-system API dependencies"
+  - "evospec feature list                     # List features with lifecycle status"
+  - "evospec feature add \"title\"              # Register a new feature"
+  - "evospec learn                            # Interactive experiment recording"
+  - "evospec adr new \"decision-title\"         # Create ADR"
+  - "evospec render                           # Render all specs into consolidated markdown"
+  - "evospec serve                            # Start MCP server"
+  - "evospec generate agents                  # Generate AI agent integration files"
+
+workflow_modes:
+  experimental: |
+    For UX/product/experimental work (edge zone):
+      /evospec.discover → interactive exploration, entity modeling, design thinking
+      → user builds prototype (with AI help, outside EvoSpec)
+      → /evospec.capture → retroactive formalization into implementation-spec.md + domain artifacts
+      → /evospec.learn → record experiment results
+    Key principle: never force documentation before the user is ready.
+
+  deliberate: |
+    For developers/known changes (core/hybrid, or confident edge):
+      /evospec.improve or /evospec.discover → spec artifacts
+      → /evospec.contract → domain contract (core/hybrid)
+      → /evospec.tasks → task list + implementation-spec.md skeleton
+      → /evospec.implement → execute tasks, update implementation-spec.md
+      → /evospec.check → validate
+    Key principle: documentation grows with the implementation.
+
+reverse_engineering:
+  - "reverse api — scans source for REST endpoints (FastAPI, Django, Flask, Spring, Express, Next.js, NestJS, Hono, Fastify, Go frameworks)"
+  - "reverse db — scans for DB models (SQLAlchemy, Django ORM, JPA/Hibernate, GORM, Prisma, TypeORM, Sequelize) + outputs entity registry YAML"
+  - "reverse cli — scans module/class/function structure across Python, Go, Java, JS/TS"
+  - "reverse deps — scans source for HTTP calls (fetch, axios, requests, etc.) and maps to known backend endpoints from core/hybrid specs"
+
+implementation_rules:
+  before_any_change:
+    - "Determine the change type: experiment, improvement, or bugfix"
+    - "Run invariant impact check (MCP check_invariant_impact or manual scan)"
+    - "Check if a spec exists in specs/changes/"
+    - "Read spec.yaml to understand the zone and classification"
+    - "Read the appropriate artifact (discovery-spec.md, improvement-scope.md, or bugfix-report.md)"
+    - "Read tasks.md if it exists — it's your implementation plan"
+  core_zone:
+    - "Invariants are non-negotiable — every invariant in spec.yaml must be enforced"
+    - "Write fitness functions FIRST (TDD for core)"
+    - "Check authorization rules in domain-contract.md before implementing endpoints"
+    - "Respect state machine transitions — forbidden transitions must raise errors"
+    - "Tenant isolation: every query on tenant-scoped entities must filter by tenant_id"
+  edge_zone:
+    - "Prototype quality is acceptable — focus on validating the hypothesis"
+    - "Instrument metrics to test assumptions listed in discovery-spec.md"
+    - "Respect kill criteria — don't over-invest before validation"
+    - "Keep it reversible — edge changes should be easy to remove"
+
+knowledge_funnel:
+  - stage: "Mystery"
+    action: "Design Thinking to explore"
+    zone: "edge"
+    guidance: "Prototype and learn, don't codify yet"
+  - stage: "Heuristic"
+    action: "Patterns emerging, judgment needed"
+    zone: "hybrid"
+    guidance: "Document as invariant candidate, test it"
+  - stage: "Algorithm"
+    action: "Codified, enforceable, automated"
+    zone: "core"
+    guidance: "Enforce with a fitness function"
+
+features_lifecycle: "discovery → specifying → implementing → validating → shipped / killed"
+
+discovery_loop:
+  cycle: "Hypothesize → Experiment → Learn → Decide → (repeat or promote)"
+  assumption_lifecycle: "untested → testing → validated / invalidated / pivoted"
+  rules:
+    - "Every assumption has a category: desirability, feasibility, viability, usability"
+    - "Every experiment ends with a decision: continue, pivot, kill, promote-to-core"
+    - "Pivots increment the iteration counter"
+    - "Kill deadlines are enforced"
+    - "When all high-risk assumptions resolved → generate tasks"

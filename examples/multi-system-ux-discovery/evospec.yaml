@@ -1,0 +1,46 @@
+# EvoSpec Configuration — Multi-System UX Discovery Example (meta-project)
+#
+# In a real setup, each service lives in its own repository with its own evospec.yaml:
+#   order-service/evospec.yaml       — owns Orders context, Order + LineItem entities
+#   inventory-service/evospec.yaml   — owns Inventory context, Product + StockReservation entities
+#   smart-cart-ui/evospec.yaml       — UX project, references backends as upstreams
+#
+# This top-level evospec.yaml exists only for the example walkthrough.
+# Run `evospec check` from within each service directory for real usage.
+
+project:
+  name: "acme-commerce-meta"
+  description: "Meta-project for multi-system UX discovery example"
+
+paths:
+  specs: "specs/changes"
+  domain: "specs/domain"
+  adrs: "docs/adr"
+  templates: "specs/templates"
+
+# Domain data is now split per-service:
+#   order-service/specs/domain/entities.yaml
+#   order-service/specs/domain/contexts.yaml
+#   inventory-service/specs/domain/entities.yaml
+#   inventory-service/specs/domain/contexts.yaml
+#   smart-cart-ui/specs/domain/entities.yaml
+#
+# The UX repo (smart-cart-ui) references backends via:
+#   upstreams:
+#     - name: "order-service"
+#       path: "../order-service"
+#     - name: "inventory-service"
+#       path: "../inventory-service"
+
+upstreams:
+  - name: "order-service"
+    path: "./order-service"
+  - name: "inventory-service"
+    path: "./inventory-service"
+
+reverse:
+  source_dirs:
+    - "order-service/src"
+    - "inventory-service"
+    - "smart-cart-ui/src"
+  framework: ""

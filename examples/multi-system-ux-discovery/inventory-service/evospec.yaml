@@ -1,0 +1,46 @@
+# EvoSpec Configuration — Inventory Service
+# This is a standalone evospec project for the inventory microservice.
+# Other repos reference this via upstreams[].
+
+project:
+  name: "inventory-service"
+  description: "Product catalog and stock management"
+  version: "1.0.0"
+
+paths:
+  specs: "specs/changes"
+  templates: "specs/_templates"
+  adrs: "docs/adr"
+  domain: "specs/domain"
+  checks: "specs/checks"
+
+schema:
+  version: "1.0.0"
+
+classification:
+  core_triggers:
+    - touches_persistence
+    - touches_billing
+  default_reversibility: "difficult"
+
+teams:
+  - name: "supply-chain"
+    type: "stream-aligned"
+    bounded_contexts: ["inventory"]
+
+upstreams: []
+
+fitness_functions:
+  run_command: "pytest tests/fitness/ -v"
+  test_runner: "pytest"
+  ci_gate: true
+
+reverse:
+  framework: "fastapi"
+  source_dirs:
+    - "."
+
+strategy:
+  winning_aspiration: "Accurate real-time stock visibility across all channels"
+  where_to_play: "Inventory management for e-commerce"
+  how_to_win: "Strong consistency guarantees, reservation-based stock management"

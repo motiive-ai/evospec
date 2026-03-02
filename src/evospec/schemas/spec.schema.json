@@ -1,0 +1,482 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evospec.dev/schemas/spec.schema.json",
+  "title": "EvoSpec Change Specification",
+  "description": "Machine-readable classification and metadata for a change specification in EvoSpec.",
+  "type": "object",
+  "required": ["id", "title", "zone", "status", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for this change spec (slug format).",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title of the change.",
+      "minLength": 3,
+      "maxLength": 200
+    },
+    "zone": {
+      "type": "string",
+      "enum": ["edge", "hybrid", "core"],
+      "description": "Classification zone: edge (exploratory), hybrid (mixed), core (structural)."
+    },
+    "change_type": {
+      "type": "string",
+      "enum": ["experiment", "improvement", "bugfix"],
+      "default": "experiment",
+      "description": "Type of change: experiment (hypothesis-driven), improvement (known need), bugfix (something broken)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "proposed", "accepted", "in-progress", "completed", "abandoned", "superseded"],
+      "description": "Current lifecycle status of the change."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the spec was created (ISO 8601)."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of last update."
+    },
+    "classification": {
+      "type": "object",
+      "description": "Detailed classification rationale (output of evospec classify).",
+      "properties": {
+        "touches_persistence": {
+          "type": "boolean",
+          "description": "Does this change alter database schema, state storage, or data models?"
+        },
+        "touches_auth": {
+          "type": "boolean",
+          "description": "Does this change affect authentication, authorization, or identity?"
+        },
+        "touches_billing": {
+          "type": "boolean",
+          "description": "Does this change affect billing, plans, subscriptions, or pricing?"
+        },
+        "touches_audit": {
+          "type": "boolean",
+          "description": "Does this change affect audit trails, compliance, or regulatory requirements?"
+        },
+        "touches_multi_tenancy": {
+          "type": "boolean",
+          "description": "Does this change affect tenant isolation or multi-tenancy boundaries?"
+        },
+        "crosses_context_boundary": {
+          "type": "boolean",
+          "description": "Does this change span multiple bounded contexts?"
+        },
+        "is_hypothesis": {
+          "type": "boolean",
+          "description": "Is this change driven by a hypothesis that needs validation?"
+        },
+        "reversibility": {
+          "type": "string",
+          "enum": ["trivial", "moderate", "difficult", "irreversible"],
+          "description": "How hard is it to undo this change if it fails?"
+        },
+        "risk_level": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"],
+          "description": "Overall risk assessment."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Free-text explanation of why this zone was chosen."
+        }
+      }
+    },
+    "invariant_impact": {
+      "type": "object",
+      "description": "Shows which existing core invariants this change may affect. Auto-populated by classify or check_invariant_impact.",
+      "properties": {
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "invariant_id": {
+                "type": "string",
+                "description": "ID of the conflicting invariant."
+              },
+              "spec_path": {
+                "type": "string",
+                "description": "Path to the spec that defines this invariant."
+              },
+              "statement": {
+                "type": "string",
+                "description": "The invariant statement."
+              },
+              "impact": {
+                "type": "string",
+                "enum": ["breaks", "relaxes", "tightens", "neutral"],
+                "description": "How this change affects the invariant."
+              },
+              "resolution": {
+                "type": "string",
+                "enum": ["exempt", "evolve", "shadow", "redesign", ""],
+                "description": "Chosen resolution strategy for this conflict."
+              },
+              "notes": {
+                "type": "string",
+                "description": "Additional context about this conflict."
+              }
+            }
+          },
+          "description": "List of invariant conflicts detected."
+        },
+        "entities_touched": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Domain entities this change affects."
+        },
+        "contexts_touched": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Bounded contexts this change crosses."
+        },
+        "reviewed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Must be true before the spec can move to in-progress."
+        }
+      }
+    },
+    "bounded_context": {
+      "type": "string",
+      "description": "The bounded context this change belongs to. Required for core zone."
+    },
+    "ownership": {
+      "type": "object",
+      "description": "Team topology ownership information.",
+      "properties": {
+        "team": {
+          "type": "string",
+          "description": "Name of the owning team."
+        },
+        "team_type": {
+          "type": "string",
+          "enum": ["", "stream-aligned", "platform", "enabling", "complicated-subsystem"],
+          "description": "Team Topologies team type."
+        },
+        "interaction_mode": {
+          "type": "string",
+          "enum": ["", "x-as-a-service", "collaboration", "facilitating"],
+          "description": "How this team interacts with other teams for this change."
+        }
+      }
+    },
+    "strategic_fit": {
+      "type": "object",
+      "description": "Roger Martin Strategy Choice Cascade alignment.",
+      "properties": {
+        "winning_aspiration": {
+          "type": "string",
+          "description": "How does this change connect to the organization's winning aspiration?"
+        },
+        "where_to_play": {
+          "type": "string",
+          "description": "Which playing field does this change operate in?"
+        },
+        "how_to_win": {
+          "type": "string",
+          "description": "How does this change contribute to the competitive advantage?"
+        },
+        "capability_strengthened": {
+          "type": "string",
+          "description": "Which must-have capability does this change strengthen?"
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "description": "Testable invariant propositions. Required for core zone, encouraged for hybrid.",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Short identifier for the invariant (e.g., INV-001)."
+          },
+          "statement": {
+            "type": "string",
+            "description": "The invariant as a testable proposition."
+          },
+          "enforcement": {
+            "type": "string",
+            "enum": ["test", "ci-check", "schema-validation", "policy", "manual-review", "api-validation", "domain-logic", "state-machine", "database-constraint", "scheduled-job", "event-handler"],
+            "description": "How this invariant is enforced."
+          },
+          "fitness_function": {
+            "type": "string",
+            "description": "Reference to the executable fitness function (file path or test name)."
+          }
+        }
+      }
+    },
+    "fitness_functions": {
+      "type": "array",
+      "description": "Executable fitness functions that guard this change. Required for core zone.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Short identifier for the fitness function (e.g., FF-001)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name of the fitness function."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["unit-test", "integration-test", "contract-test", "schema-check", "lint-rule", "ci-gate", "manual-checklist"],
+            "description": "Type of fitness function."
+          },
+          "path": {
+            "type": "string",
+            "description": "File path to the fitness function implementation."
+          },
+          "dimension": {
+            "type": "string",
+            "description": "Architectural dimension being protected (e.g., security, data-integrity, performance, operability)."
+          }
+        }
+      }
+    },
+    "adrs": {
+      "type": "array",
+      "description": "References to related Architecture Decision Records.",
+      "items": {
+        "type": "string",
+        "description": "Path or ID of the related ADR."
+      }
+    },
+    "traceability": {
+      "type": "object",
+      "description": "Links from this spec to implementation artifacts (can be auto-generated by reverse engineering).",
+      "properties": {
+        "endpoints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "API endpoints affected."
+        },
+        "tables": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Database tables affected."
+        },
+        "modules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Code modules/packages affected."
+        },
+        "events": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Domain events produced or consumed."
+        },
+        "migrations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Database migrations related to this change."
+        }
+      }
+    },
+    "design_thinking": {
+      "type": "object",
+      "description": "Design Thinking phase tracking for edge/hybrid zone work.",
+      "properties": {
+        "current_phase": {
+          "type": "string",
+          "enum": ["", "empathize", "define", "ideate", "prototype", "test"],
+          "description": "Current Design Thinking phase."
+        },
+        "empathy_artifacts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Links to empathy research (interviews, observations, journey maps)."
+        },
+        "problem_statement": {
+          "type": "string",
+          "description": "Human-centered problem statement ('How Might We...')."
+        },
+        "ideas_explored": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of solution ideas explored in ideation."
+        },
+        "prototypes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "description": "Prototype ID (e.g., PROTO-001)." },
+              "type": { "type": "string", "enum": ["figma", "code-spike", "paper", "wizard-of-oz"], "description": "Prototype type." },
+              "url": { "type": "string", "description": "Link to the prototype." },
+              "experiment_id": { "type": "string", "description": "Links to experiment that tested this prototype." },
+              "feedback_summary": { "type": "string", "description": "Summary of user/test feedback." }
+            }
+          },
+          "description": "Prototypes created during Design Thinking."
+        }
+      }
+    },
+    "organizational_risk": {
+      "type": "object",
+      "description": "Hogan-inspired organizational risk signals.",
+      "properties": {
+        "derailer_risks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Potential organizational derailers (e.g., 'over-engineering tendency', 'scope creep pattern', 'decision avoidance')."
+        },
+        "cultural_constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Cultural or behavioral patterns that may affect this change."
+        },
+        "mitigation": {
+          "type": "string",
+          "description": "How these risks will be mitigated."
+        }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "description": "Continuous Discovery metadata for edge/hybrid work.",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "description": "The product outcome metric this change aims to influence."
+        },
+        "opportunity": {
+          "type": "string",
+          "description": "The customer opportunity ('How Might We' framing)."
+        },
+        "iteration": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Current discovery iteration (increments on pivot)."
+        },
+        "cadence": {
+          "type": "string",
+          "enum": ["weekly", "biweekly", "sprint"],
+          "default": "weekly",
+          "description": "Learning checkpoint frequency."
+        },
+        "next_checkpoint": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of next learning checkpoint."
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "description": "Assumption ID (e.g., A-001)." },
+              "statement": { "type": "string" },
+              "category": {
+                "type": "string",
+                "enum": ["desirability", "feasibility", "viability", "usability"],
+                "description": "Assumption category."
+              },
+              "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+              "status": {
+                "type": "string",
+                "enum": ["untested", "testing", "validated", "invalidated", "pivoted"],
+                "description": "Current assumption status."
+              },
+              "test_method": { "type": "string" },
+              "success_criteria": { "type": "string" },
+              "result": { "type": "string" },
+              "result_date": { "type": "string", "format": "date" },
+              "learning": { "type": "string" },
+              "pivot_to": { "type": "string", "description": "New direction if invalidated." }
+            }
+          },
+          "description": "Assumptions to test, ordered by risk."
+        },
+        "experiments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "description": "Experiment ID (e.g., EXP-001)." },
+              "assumption_id": { "type": "string", "description": "Links to assumption being tested." },
+              "type": {
+                "type": "string",
+                "enum": ["prototype", "interview", "survey", "A-B-test", "wizard-of-oz", "analytics", "spike"],
+                "description": "Experiment type."
+              },
+              "description": { "type": "string" },
+              "started_at": { "type": "string", "format": "date" },
+              "completed_at": { "type": "string", "format": "date" },
+              "sample_size": { "type": "integer", "minimum": 0 },
+              "result": { "type": "string" },
+              "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+              "decision": {
+                "type": "string",
+                "enum": ["continue", "pivot", "kill", "promote-to-core"],
+                "description": "Decision after experiment."
+              },
+              "next_experiment": { "type": "string" }
+            }
+          },
+          "description": "Concrete experiments run against assumptions."
+        },
+        "kill_criteria": {
+          "type": "string",
+          "description": "Specific, measurable criteria for when to abandon."
+        },
+        "kill_deadline": {
+          "type": "string",
+          "format": "date",
+          "description": "Hard deadline for kill decision."
+        },
+        "learnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string", "format": "date" },
+              "iteration": { "type": "integer" },
+              "experiment_id": { "type": "string" },
+              "learning": { "type": "string" },
+              "impact": { "type": "string" },
+              "spec_changed": { "type": "boolean" }
+            }
+          },
+          "description": "Learning log — updated each iteration."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "zone": { "const": "core" } }
+      },
+      "then": {
+        "required": ["bounded_context", "invariants", "fitness_functions"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "zone": { "const": "edge" } }
+      },
+      "then": {
+        "required": ["discovery"]
+      }
+    }
+  ]
+}

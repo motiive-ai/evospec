@@ -1,0 +1,77 @@
+# EvoSpec Project Configuration
+# This file is created by `evospec init` at the root of your project.
+
+project:
+  name: "evospec"
+  description: "Progressive specs at the edge. Contracts in the core."
+  version: "0.1.0"
+
+# Where specs live relative to project root
+paths:
+  specs: "specs/changes"
+  templates: "specs/_templates"
+  adrs: "docs/adr"
+  domain: "specs/domain"
+  checks: "specs/checks"
+
+# Schema validation
+schema:
+  version: "1.0.0"
+  spec_schema: "https://evospec.dev/schemas/spec.schema.json"
+
+# Classification defaults
+classification:
+  # Fields that automatically push a change to "core" zone
+  core_triggers:
+    - touches_persistence
+    - touches_auth
+    - touches_billing
+    - touches_audit
+    - touches_multi_tenancy
+  # Default reversibility when not specified
+  default_reversibility: "moderate"
+
+# Team Topologies
+teams:
+  - name: "evospec-core"
+    type: "platform"
+    bounded_contexts: ["spec-engine", "domain-management", "agent-integration"]
+
+# Domain model lives in specs/domain/ (separate files for maintainability):
+#   specs/domain/entities.yaml   — entity registry (fields, relationships, invariants)
+#   specs/domain/contexts.yaml   — bounded contexts (owner, type, description)
+#   specs/domain/features.yaml   — feature lifecycle (status, knowledge stage)
+#   specs/domain/glossary.md     — ubiquitous language
+#   specs/domain/context-map.md  — context relationships
+
+# Upstream dependencies — reference other repos' published contracts
+upstreams: []
+
+# Fitness function runners
+fitness_functions:
+  run_command: "pytest tests/ -v"
+  test_runner: "pytest"
+  ci_gate: true
+
+# Reverse engineering configuration
+reverse:
+  framework: ""
+  source_dirs:
+    - "src/evospec"
+
+# Strategic context (Roger Martin — Playing to Win)
+strategy:
+  winning_aspiration: "Be the standard spec-driven delivery toolkit for AI-assisted development"
+  where_to_play: "Teams using AI coding agents (Windsurf, Claude Code, Cursor) that need proportional governance"
+  how_to_win: "Zone-based classification + executable guardrails + MCP integration + multi-platform agent generation"
+  must_have_capabilities:
+    - "Zone-based auto-classification (edge/hybrid/core)"
+    - "Cross-spec invariant safety net"
+    - "Multi-platform AI agent file generation from canonical specs"
+    - "Cross-repo domain sharing via upstreams"
+    - "Reverse engineering for existing codebases"
+  enabling_systems:
+    - "Python CLI (Click)"
+    - "MCP server (FastMCP)"
+    - "YAML + Markdown spec format"
+    - "JSON Schema validation"

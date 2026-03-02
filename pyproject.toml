@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evospec"
+version = "0.1.0"
+description = "Progressive specs at the edge. Contracts in the core."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "EvoSpec Contributors" },
+]
+keywords = [
+    "sdd",
+    "spec-driven",
+    "domain-driven-design",
+    "architecture-decision-records",
+    "evolutionary-architecture",
+    "continuous-discovery",
+    "design-thinking",
+    "fitness-functions",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "click>=8.1",
+    "pyyaml>=6.0",
+    "jsonschema>=4.20",
+    "jinja2>=3.1",
+    "rich>=13.0",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+evospec = "evospec.cli.main:cli"
+evospec-mcp = "evospec.mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/evospec/evospec"
+Documentation = "https://github.com/evospec/evospec"
+Repository = "https://github.com/evospec/evospec"
+Issues = "https://github.com/evospec/evospec/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evospec"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/evospec", "schemas", "README.md", "LICENSE"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

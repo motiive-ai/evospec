@@ -1,0 +1,26 @@
+# Bounded Contexts — E-Commerce Platform
+
+- name: "orders"
+  owner: "commerce-core"
+  type: "core"
+  description: "Order lifecycle from cart to delivery. Owns Order and LineItem entities."
+
+- name: "catalog"
+  owner: "commerce-core"
+  type: "core"
+  description: "Product catalog management. Owns Product entity."
+
+- name: "identity"
+  owner: "platform"
+  type: "generic"
+  description: "User authentication and authorization. JWT-based."
+
+- name: "recommendations"
+  owner: "growth"
+  type: "supporting"
+  description: "Smart product recommendations based on browsing and purchase history."
+
+- name: "notifications"
+  owner: "growth"
+  type: "supporting"
+  description: "Email, push, and in-app notification delivery."

@@ -1,0 +1,62 @@
+# Domain Entity Registry — Inventory Service
+# These entities are published to downstream repos via upstreams[].
+
+- name: "Product"
+  context: "Inventory"
+  table: "products"
+  aggregate_root: true
+  description: "A product in the catalog with stock tracking. Stock quantity must never go negative."
+  fields:
+    - name: "id"
+      type: "UUID"
+    - name: "name"
+      type: "String"
+    - name: "sku"
+      type: "String"
+    - name: "price"
+      type: "Decimal"
+    - name: "stock_quantity"
+      type: "Integer"
+      constraints: "must be >= 0"
+    - name: "reserved_quantity"
+      type: "Integer"
+      constraints: "must be <= stock_quantity"
+    - name: "is_active"
+      type: "Boolean"
+  relationships:
+    - target: "StockReservation"
+      type: "one-to-many"
+  invariants:
+    - "INV-INV-001"
+    - "INV-INV-002"
+    - "INV-INV-007"
+
+- name: "StockReservation"
+  context: "Inventory"
+  table: "stock_reservations"
+  aggregate_root: false
+  description: "A temporary hold on stock for an order. Expires after 30 minutes if not confirmed."
+  fields:
+    - name: "id"
+      type: "UUID"
+    - name: "product_id"
+      type: "UUID"
+    - name: "order_id"
+      type: "String"
+    - name: "quantity"
+      type: "Integer"
+      constraints: "must be > 0"
+    - name: "status"
+      type: "String"
+      constraints: "pending | confirmed | released | expired"
+    - name: "expires_at"
+      type: "DateTime"
+      constraints: "30 minutes after creation"
+  relationships:
+    - target: "Product"
+      type: "many-to-one"
+  invariants:
+    - "INV-INV-003"
+    - "INV-INV-004"
+    - "INV-INV-005"
+    - "INV-INV-006"
