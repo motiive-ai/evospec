@@ -111,6 +111,19 @@ def run_checks(strict: bool = False) -> None:
 
         console.print()
 
+    # Entity registry validation
+    w_ent = _check_entity_registry(spec_dirs, config, root)
+    warnings += w_ent
+
+    # Cross-spec invariant impact check
+    e, w = _check_cross_spec_invariants(spec_dirs, root)
+    errors += e
+    warnings += w
+
+    # Cross-spec endpoint traceability check
+    w2 = _check_cross_spec_endpoints(spec_dirs, root)
+    warnings += w2
+
     # Summary
     console.print("─" * 50)
     console.print(f"[bold]Checked {checked} spec(s)[/bold]")
@@ -227,6 +240,289 @@ def _check_general(spec: dict, spec_dir: Path) -> tuple[int, int]:
         warnings += 1
 
     return 0, warnings
+
+
+def _check_entity_registry(
+    spec_dirs: list[Path], config: dict, root: Path,
+) -> int:
+    """Validate entity references against the domain entity registry.
+
+    Checks that entities_touched in edge/hybrid specs and traceability.tables
+    in core specs reference entities defined in evospec.yaml domain.entities.
+    """
+    warnings = 0
+    entities = config.get("domain", {}).get("entities", [])
+    if not entities:
+        return 0  # No registry defined — skip silently
+
+    # Build lookup sets
+    entity_names = {e.get("name", "").lower() for e in entities}
+    entity_tables = {e.get("table", "").lower() for e in entities if e.get("table")}
+    entity_contexts = {e.get("context", "").lower() for e in entities if e.get("context")}
+
+    found_any = False
+
+    for spec_dir in spec_dirs:
+        with open(spec_dir / "spec.yaml") as f:
+            spec = yaml.safe_load(f) or {}
+
+        title = spec.get("title", spec_dir.name)
+        zone = spec.get("zone", "")
+        spec_warnings: list[str] = []
+
+        # Check entities_touched against registry
+        impact = spec.get("invariant_impact", {})
+        for ent in impact.get("entities_touched", []):
+            if ent.lower() not in entity_names:
+                spec_warnings.append(
+                    f"entity '{ent}' in entities_touched not found in domain registry"
+                )
+
+        # Check contexts_touched against registered contexts
+        for ctx in impact.get("contexts_touched", []):
+            if ctx.lower() not in entity_contexts:
+                # Also check bounded_contexts config
+                bc_names = {
+                    bc.get("name", "").lower()
+                    for bc in config.get("bounded_contexts", [])
+                }
+                if ctx.lower() not in bc_names:
+                    spec_warnings.append(
+                        f"context '{ctx}' in contexts_touched not found in bounded_contexts or entity registry"
+                    )
+
+        # Check traceability.tables against registry
+        for table in spec.get("traceability", {}).get("tables", []):
+            if table.lower() not in entity_tables:
+                spec_warnings.append(
+                    f"table '{table}' in traceability.tables not found in domain registry"
+                )
+
+        if spec_warnings:
+            if not found_any:
+                console.print("[bold]Entity registry validation[/bold]")
+                console.print()
+                found_any = True
+            console.print(f"  [bold]{title}[/bold] [dim]({zone})[/dim]")
+            for w in spec_warnings:
+                console.print(f"    [yellow]⚠[/yellow] {w}")
+            warnings += len(spec_warnings)
+            console.print()
+
+    return warnings
+
+
+def _check_cross_spec_invariants(
+    spec_dirs: list[Path], root: Path,
+) -> tuple[int, int]:
+    """Check edge/hybrid specs against core invariants they might affect.
+
+    When an edge or hybrid spec declares invariant_impact.entities_touched or
+    invariant_impact.contexts_touched, automatically check against all core/hybrid
+    invariants and warn about potential conflicts.
+    """
+    errors = 0
+    warnings = 0
+
+    # First pass: collect all core/hybrid invariants
+    core_invariants: list[dict] = []
+    for spec_dir in spec_dirs:
+        with open(spec_dir / "spec.yaml") as f:
+            spec = yaml.safe_load(f) or {}
+        zone = spec.get("zone", "")
+        if zone not in ("core", "hybrid"):
+            continue
+        bc = (spec.get("bounded_context") or "").lower()
+        title = spec.get("title", spec_dir.name)
+        spec_entities = [
+            t.lower() for t in spec.get("traceability", {}).get("tables", [])
+        ]
+        spec_entities += [
+            m.lower() for m in spec.get("traceability", {}).get("modules", [])
+        ]
+        for inv in spec.get("invariants", []):
+            core_invariants.append({
+                "id": inv.get("id", "?"),
+                "statement": inv.get("statement", ""),
+                "enforcement": inv.get("enforcement", ""),
+                "spec_title": title,
+                "context": bc,
+                "spec_entities": spec_entities,
+            })
+
+    if not core_invariants:
+        return 0, 0
+
+    # Second pass: check edge/hybrid specs for conflicts
+    found_any = False
+    for spec_dir in spec_dirs:
+        with open(spec_dir / "spec.yaml") as f:
+            spec = yaml.safe_load(f) or {}
+        zone = spec.get("zone", "")
+        if zone not in ("edge", "hybrid"):
+            continue
+
+        impact = spec.get("invariant_impact", {})
+        entities = [e.lower() for e in impact.get("entities_touched", [])]
+        contexts = [c.lower() for c in impact.get("contexts_touched", [])]
+        declared_conflicts = impact.get("conflicts", [])
+        declared_ids = {c.get("invariant_id", "") for c in declared_conflicts}
+
+        if not entities and not contexts:
+            continue
+
+        title = spec.get("title", spec_dir.name)
+
+        # Find conflicts
+        auto_conflicts: list[dict] = []
+        for inv in core_invariants:
+            reasons = []
+            stmt_lower = inv["statement"].lower()
+
+            for entity in entities:
+                if entity in stmt_lower:
+                    reasons.append(f"touches entity '{entity}'")
+                if entity in inv["spec_entities"]:
+                    reasons.append(f"entity '{entity}' in same core spec")
+
+            for ctx in contexts:
+                if ctx == inv["context"]:
+                    reasons.append(f"same context '{ctx}'")
+
+            if reasons:
+                auto_conflicts.append({
+                    "id": inv["id"],
+                    "statement": inv["statement"],
+                    "spec": inv["spec_title"],
+                    "reasons": reasons,
+                    "declared": inv["id"] in declared_ids,
+                })
+
+        if not auto_conflicts:
+            continue
+
+        if not found_any:
+            console.print("[bold]Cross-spec invariant impact check[/bold]")
+            console.print()
+            found_any = True
+
+        console.print(f"  [bold]{title}[/bold] [dim]({zone})[/dim]")
+        console.print(f"  Touches entities: {', '.join(entities) if entities else 'none'}")
+        console.print(f"  Touches contexts: {', '.join(contexts) if contexts else 'none'}")
+
+        undeclared = [c for c in auto_conflicts if not c["declared"]]
+        declared = [c for c in auto_conflicts if c["declared"]]
+
+        if declared:
+            console.print(f"  [green]✓[/green] {len(declared)} conflict(s) declared and documented:")
+            for c in declared:
+                console.print(f"    [dim]{c['id']}: {c['statement'][:80]}[/dim]")
+
+        if undeclared:
+            console.print(
+                f"  [yellow]⚠ {len(undeclared)} potential conflict(s) NOT declared "
+                f"in invariant_impact.conflicts:[/yellow]"
+            )
+            for c in undeclared:
+                console.print(f"    [yellow]⚠ {c['id']}[/yellow]: {c['statement'][:80]}")
+                console.print(f"      [dim]from: {c['spec']} — {', '.join(c['reasons'])}[/dim]")
+            warnings += len(undeclared)
+
+        console.print()
+
+    return errors, warnings
+
+
+def _check_cross_spec_endpoints(
+    spec_dirs: list[Path], root: Path,
+) -> int:
+    """Check that edge/hybrid specs reference endpoints that exist in core specs.
+
+    Warns when an edge/hybrid spec lists endpoints in traceability that don't
+    match any core/hybrid spec's endpoint list.
+    """
+    warnings = 0
+
+    # Collect all core/hybrid endpoints
+    core_endpoints: dict[str, str] = {}  # endpoint -> spec title
+    for spec_dir in spec_dirs:
+        with open(spec_dir / "spec.yaml") as f:
+            spec = yaml.safe_load(f) or {}
+        zone = spec.get("zone", "")
+        if zone not in ("core", "hybrid"):
+            continue
+        title = spec.get("title", spec_dir.name)
+        for ep in spec.get("traceability", {}).get("endpoints", []):
+            # Normalize: remove method prefix if present, strip whitespace
+            ep_path = ep.strip()
+            parts = ep_path.split(" ", 1)
+            if len(parts) == 2:
+                ep_path = parts[1].strip()
+            core_endpoints[ep_path] = title
+
+    if not core_endpoints:
+        return 0
+
+    # Check edge/hybrid specs
+    found_any = False
+    for spec_dir in spec_dirs:
+        with open(spec_dir / "spec.yaml") as f:
+            spec = yaml.safe_load(f) or {}
+        zone = spec.get("zone", "")
+        if zone not in ("edge", "hybrid"):
+            continue
+
+        title = spec.get("title", spec_dir.name)
+        spec_endpoints = spec.get("traceability", {}).get("endpoints", [])
+        if not spec_endpoints:
+            continue
+
+        matched = []
+        unmatched = []
+        for ep in spec_endpoints:
+            ep_path = ep.strip()
+            parts = ep_path.split(" ", 1)
+            if len(parts) == 2:
+                ep_path = parts[1].strip()
+            if ep_path in core_endpoints:
+                matched.append((ep_path, core_endpoints[ep_path]))
+            else:
+                unmatched.append(ep_path)
+
+        if matched:
+            if not found_any:
+                console.print("[bold]Cross-spec endpoint traceability[/bold]")
+                console.print()
+                found_any = True
+
+            console.print(f"  [bold]{title}[/bold] [dim]({zone})[/dim]")
+            console.print(f"  [green]✓[/green] {len(matched)} endpoint(s) traced to core specs:")
+            # Group by core spec
+            by_spec: dict[str, list[str]] = {}
+            for ep, core_title in matched:
+                by_spec.setdefault(core_title, []).append(ep)
+            for core_title, eps in by_spec.items():
+                console.print(f"    [dim]→ {core_title}: {len(eps)} endpoint(s)[/dim]")
+
+        if unmatched:
+            if not found_any:
+                console.print("[bold]Cross-spec endpoint traceability[/bold]")
+                console.print()
+                found_any = True
+            if not matched:
+                console.print(f"  [bold]{title}[/bold] [dim]({zone})[/dim]")
+            console.print(
+                f"  [yellow]⚠ {len(unmatched)} endpoint(s) not found in any core spec "
+                f"(may need new backend work):[/yellow]"
+            )
+            for ep in unmatched:
+                console.print(f"    [yellow]⚠[/yellow] {ep}")
+            warnings += len(unmatched)
+
+        if matched or unmatched:
+            console.print()
+
+    return warnings
 
 
 def run_fitness_functions(spec_path: str | None = None) -> tuple[int, int, int]:

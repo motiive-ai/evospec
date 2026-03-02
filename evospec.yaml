@@ -1,0 +1,75 @@
+# EvoSpec Project Configuration
+# This file is created by `evospec init` at the root of your project.
+
+project:
+  name: "evospec"
+  description: "Progressive specs at the edge. Contracts in the core."
+  version: "0.1.0"
+
+# Where specs live relative to project root
+paths:
+  specs: "specs/changes"
+  templates: "specs/_templates"
+  adrs: "docs/adr"
+  domain: "specs/domain"
+  checks: "specs/checks"
+
+# Schema validation
+schema:
+  version: "1.0.0"
+  spec_schema: "https://evospec.dev/schemas/spec.schema.json"
+
+# Classification defaults
+classification:
+  # Fields that automatically push a change to "core" zone
+  core_triggers:
+    - touches_persistence
+    - touches_auth
+    - touches_billing
+    - touches_audit
+    - touches_multi_tenancy
+  # Default reversibility when not specified
+  default_reversibility: "moderate"
+
+# Team Topologies
+teams: []
+  # - name: "product-core"
+  #   type: "stream-aligned"
+  #   bounded_contexts: ["identity", "orders"]
+  # - name: "platform"
+  #   type: "platform"
+  #   bounded_contexts: ["infrastructure", "observability"]
+
+# Domain model lives in specs/domain/ (separate files for maintainability):
+#   specs/domain/entities.yaml   — entity registry (fields, relationships, invariants)
+#   specs/domain/contexts.yaml   — bounded contexts (owner, type, description)
+#   specs/domain/features.yaml   — feature lifecycle (status, knowledge stage)
+#   specs/domain/glossary.md     — ubiquitous language
+#   specs/domain/context-map.md  — context relationships
+
+# Upstream dependencies — reference other repos' published contracts
+upstreams: []
+
+# Fitness function runners
+fitness_functions:
+  # Command to run all fitness functions
+  run_command: ""  # e.g., "pytest tests/fitness/ -v"
+  # Individual test runner (used by MCP server)
+  test_runner: "pytest"  # pytest | jest | go test
+  # CI integration
+  ci_gate: false
+
+# Reverse engineering configuration
+reverse:
+  framework: ""  # fastapi | django | express | spring | rails
+  source_dirs: []
+  # - "app/api"
+  # - "app/models"
+
+# Strategic context (Roger Martin — Playing to Win)
+strategy:
+  winning_aspiration: ""
+  where_to_play: ""
+  how_to_win: ""
+  must_have_capabilities: []
+  enabling_systems: []

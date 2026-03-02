@@ -8,25 +8,31 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from evospec.core.config import find_project_root, load_config
+from evospec.core.config import find_project_root, get_paths, load_config
 
 console = Console()
 
 
+def _features_file(root: Path) -> Path:
+    """Return the path to specs/domain/features.yaml."""
+    config = yaml.safe_load((root / "evospec.yaml").read_text()) or {}
+    domain_dir = root / get_paths(config)["domain"]
+    return domain_dir / "features.yaml"
+
+
 def _load_config_with_features(root: Path) -> tuple[dict, list[dict], Path]:
-    """Load config and return (config, features_list, config_path)."""
-    config_path = root / "evospec.yaml"
+    """Load config and return (config, features_list, features_file_path)."""
     config = load_config(root)
     features = config.get("features", []) or []
-    return config, features, config_path
+    return config, features, _features_file(root)
 
 
 def _save_features(root: Path, config: dict, features: list[dict]) -> None:
-    """Write updated features list back to evospec.yaml."""
-    config_path = root / "evospec.yaml"
-    config["features"] = features
-    with open(config_path, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    """Write updated features list to specs/domain/features.yaml."""
+    feat_path = _features_file(root)
+    feat_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(feat_path, "w") as f:
+        yaml.dump(features, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
 
 def _next_feature_id(features: list[dict]) -> str:

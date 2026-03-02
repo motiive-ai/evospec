@@ -1,0 +1,6 @@
+# Bounded Contexts — Order Service
+
+- name: "Orders"
+  owner: "commerce-platform"
+  type: "core"
+  description: "Order lifecycle from cart to delivery. Owns Order and LineItem entities."

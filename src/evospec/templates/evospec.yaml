@@ -40,27 +40,20 @@ teams: []
   #   type: "platform"
   #   bounded_contexts: ["infrastructure", "observability"]
 
-# Bounded Contexts registry
-bounded_contexts: []
-  # - name: "identity"
-  #   owner: "product-core"
-  #   type: "core"  # core | supporting | generic
-  # - name: "orders"
-  #   owner: "product-core"
-  #   type: "core"
+# Domain model lives in specs/domain/ (separate files for maintainability):
+#   specs/domain/entities.yaml   — entity registry (fields, relationships, invariants)
+#   specs/domain/contexts.yaml   — bounded contexts (owner, type, description)
+#   specs/domain/features.yaml   — feature lifecycle (status, knowledge stage)
+#   specs/domain/glossary.md     — ubiquitous language
+#   specs/domain/context-map.md  — context relationships
 
-# Features registry — tracks feature lifecycle across the Knowledge Funnel
-features: []
-  # - id: "feat-001"
-  #   title: "Smart Recommendations"
-  #   zone: "edge"
-  #   status: "discovery"  # discovery | specifying | implementing | validating | shipped | killed
-  #   knowledge_stage: "mystery"  # mystery | heuristic | algorithm
-  #   spec_path: "specs/changes/2026-03-01-smart-recs"
-  #   owner: "product-core"
-  #   created_at: "2026-03-01"
-  #   shipped_at: ""
-  #   kill_reason: ""
+# Upstream dependencies — reference other repos' published contracts
+# This enables cross-repo invariant checking and entity resolution.
+upstreams: []
+  # - name: "order-service"
+  #   path: "../order-service"     # relative path to sibling repo
+  # - name: "inventory-service"
+  #   path: "../inventory-service"
 
 # Fitness function runners
 fitness_functions:

@@ -92,7 +92,15 @@ def reverse() -> None:
 
 
 @reverse.command("api")
-@click.option("--framework", type=click.Choice(["fastapi", "django", "express", "spring", "rails"]))
+@click.option(
+    "--framework",
+    type=click.Choice([
+        "fastapi", "django", "flask",
+        "gin", "echo", "fiber", "chi", "gorilla", "net-http",
+        "spring",
+        "express", "nextjs", "nestjs", "hono", "fastify",
+    ]),
+)
 @click.option("--source", default=None, help="Source directory to scan.")
 def reverse_api(framework: str | None, source: str | None) -> None:
     """Reverse-engineer API endpoints into spec stubs."""
@@ -108,6 +116,28 @@ def reverse_db(source: str | None) -> None:
     from evospec.reverse.db import reverse_engineer_db
 
     reverse_engineer_db(source=source)
+
+
+@reverse.command("cli")
+@click.option("--source", default=None, help="Source directory to scan.")
+def reverse_cli(source: str | None) -> None:
+    """Reverse-engineer CLI commands and Python module structure into spec stubs."""
+    from evospec.reverse.cli import reverse_engineer_cli
+
+    reverse_engineer_cli(source=source)
+
+
+@reverse.command("deps")
+@click.option("--source", default=None, help="Source directory to scan for API calls.")
+def reverse_deps(source: str | None) -> None:
+    """Reverse-engineer cross-system API dependencies from source code.
+
+    Scans source files for HTTP calls (fetch, axios, requests, etc.) and maps
+    them to known backend endpoints declared in core/hybrid spec traceability.
+    """
+    from evospec.reverse.deps import reverse_engineer_deps
+
+    reverse_engineer_deps(source=source)
 
 
 @cli.command()
@@ -199,6 +229,45 @@ def serve() -> None:
     from evospec.mcp.server import main as mcp_main
 
     mcp_main()
+
+
+@cli.group()
+def generate() -> None:
+    """Generate project artifacts from canonical sources."""
+
+
+@generate.command("agents")
+@click.option(
+    "--platform",
+    type=click.Choice(["windsurf", "claude", "cursor", "all"]),
+    default="all",
+    help="Target platform (default: all).",
+)
+def generate_agents_cmd(platform: str) -> None:
+    """Generate AI agent integration files from canonical workflow specs.
+
+    Reads platform-agnostic workflow YAMLs and emits platform-specific files:
+    Windsurf (.windsurf/workflows/), Claude Code (CLAUDE.md), Cursor (.cursor/rules/).
+    """
+    from pathlib import Path
+
+    from rich.console import Console
+
+    from evospec.core.agents import generate_agents
+
+    console = Console()
+    dest = Path.cwd()
+    platforms = None if platform == "all" else [platform]
+
+    results = generate_agents(dest=dest, platforms=platforms)
+
+    for plat, files in results.items():
+        console.print(f"\n[bold]{plat}[/bold]: {len(files)} file(s)")
+        for f in files:
+            console.print(f"  [green]✓[/green] {f.relative_to(dest)}")
+
+    total = sum(len(f) for f in results.values())
+    console.print(f"\n[bold green]Generated {total} file(s) across {len(results)} platform(s).[/bold green]")
 
 
 if __name__ == "__main__":

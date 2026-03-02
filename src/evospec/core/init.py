@@ -61,6 +61,10 @@ def init_project(name: str, description: str = "") -> None:
             shutil.copy2(template_file, dest)
             console.print(f"[green]✓[/green] Copied template {template_file.name}")
 
+    # Create domain file stubs (entities, contexts, features)
+    domain_dir = project_root / default_paths["domain"]
+    _create_domain_stubs(domain_dir)
+
     # Create glossary stub
     glossary_path = project_root / default_paths["domain"] / "glossary.md"
     if not glossary_path.exists():
@@ -127,28 +131,92 @@ def init_project(name: str, description: str = "") -> None:
     console.print("  evospec classify                  Classify a change by zone")
     console.print("  evospec adr new \"decision-title\"  Record an architectural decision")
     console.print()
-    console.print("[dim]AI agent integration:[/dim]")
+    console.print("[dim]AI agent integration (generated from canonical workflow specs):[/dim]")
     console.print("  [dim]Windsurf: /evospec.discover, /evospec.contract, /evospec.tasks, /evospec.implement, /evospec.check[/dim]")
     console.print("  [dim]Claude Code: reads CLAUDE.md automatically[/dim]")
+    console.print("  [dim]Cursor: reads .cursor/rules/ automatically[/dim]")
+    console.print("  [dim]Regenerate: evospec generate agents[/dim]")
+
+
+def _create_domain_stubs(domain_dir: Path) -> None:
+    """Create stub domain files (entities.yaml, contexts.yaml, features.yaml)."""
+    domain_dir.mkdir(parents=True, exist_ok=True)
+
+    entities_path = domain_dir / "entities.yaml"
+    if not entities_path.exists():
+        entities_path.write_text(
+            "# Domain Entity Registry\n"
+            "# Canonical source of truth for domain entities.\n"
+            "# Populated manually or via `evospec reverse db`.\n"
+            "#\n"
+            "# Each entity belongs to a bounded context and describes:\n"
+            "# - fields (name, type, constraints)\n"
+            "# - relationships to other entities\n"
+            "# - invariants that reference this entity\n"
+            "#\n"
+            "# Example:\n"
+            "# - name: \"Order\"\n"
+            "#   context: \"orders\"\n"
+            "#   table: \"orders\"\n"
+            "#   aggregate_root: true\n"
+            "#   description: \"Represents a customer purchase with line items and payment.\"\n"
+            "#   fields:\n"
+            "#     - name: \"id\"\n"
+            "#       type: \"UUID\"\n"
+            "#     - name: \"status\"\n"
+            "#       type: \"String\"\n"
+            "#       constraints: \"draft | submitted | shipped | delivered | cancelled\"\n"
+            "#   relationships:\n"
+            "#     - target: \"LineItem\"\n"
+            "#       type: \"one-to-many\"\n"
+            "#   invariants:\n"
+            "#     - \"ORD-INV-001\"\n"
+            "[]\n"
+        )
+        console.print("[green]✓[/green] Created specs/domain/entities.yaml")
+
+    contexts_path = domain_dir / "contexts.yaml"
+    if not contexts_path.exists():
+        contexts_path.write_text(
+            "# Bounded Contexts Registry\n"
+            "# Defines the bounded contexts in your domain (DDD strategic design).\n"
+            "#\n"
+            "# Example:\n"
+            "# - name: \"orders\"\n"
+            "#   owner: \"commerce-team\"\n"
+            "#   type: \"core\"           # core | supporting | generic\n"
+            "#   description: \"Order lifecycle from cart to delivery.\"\n"
+            "[]\n"
+        )
+        console.print("[green]✓[/green] Created specs/domain/contexts.yaml")
+
+    features_path = domain_dir / "features.yaml"
+    if not features_path.exists():
+        features_path.write_text(
+            "# Features Registry\n"
+            "# Tracks feature lifecycle across the Knowledge Funnel.\n"
+            "# Managed via `evospec feature add/update/list`.\n"
+            "#\n"
+            "# Lifecycle: discovery → specifying → implementing → validating → shipped / killed\n"
+            "# Knowledge: mystery → heuristic → algorithm\n"
+            "#\n"
+            "# A change (specs/changes/) may create a feature, advance it, or have nothing\n"
+            "# to do with features (e.g. a bugfix). Not every change is a feature.\n"
+            "[]\n"
+        )
+        console.print("[green]✓[/green] Created specs/domain/features.yaml")
 
 
 def _setup_ai_agents(project_root: Path) -> None:
-    """Copy AI agent integration files (Windsurf workflows, CLAUDE.md)."""
-    # Windsurf workflows
-    windsurf_src = TEMPLATE_DIR / ".windsurf" / "workflows"
-    windsurf_dest = project_root / ".windsurf" / "workflows"
+    """Generate AI agent integration files from canonical workflow specs."""
+    from evospec.core.agents import generate_agents
 
-    if windsurf_src.exists():
-        windsurf_dest.mkdir(parents=True, exist_ok=True)
-        for wf_file in windsurf_src.glob("*.md"):
-            dest = windsurf_dest / wf_file.name
-            if not dest.exists():
-                shutil.copy2(wf_file, dest)
-        console.print("[green]✓[/green] Created .windsurf/workflows/ (Cascade integration)")
-
-    # CLAUDE.md
-    claude_src = TEMPLATE_DIR / "CLAUDE.md"
-    claude_dest = project_root / "CLAUDE.md"
-    if claude_src.exists() and not claude_dest.exists():
-        shutil.copy2(claude_src, claude_dest)
-        console.print("[green]✓[/green] Created CLAUDE.md (Claude Code integration)")
+    results = generate_agents(dest=project_root)
+    for platform, files in results.items():
+        if files:
+            if platform == "windsurf":
+                console.print("[green]✓[/green] Generated .windsurf/workflows/ (Cascade integration)")
+            elif platform == "claude":
+                console.print("[green]✓[/green] Generated CLAUDE.md (Claude Code integration)")
+            elif platform == "cursor":
+                console.print("[green]✓[/green] Generated .cursor/rules/ (Cursor integration)")

@@ -1,0 +1,54 @@
+# EvoSpec Configuration — Smart Cart UI
+# This is the UX/frontend project. It references backend services as upstreams
+# so the AI can check invariant impact across system boundaries.
+
+project:
+  name: "smart-cart-ui"
+  description: "Smart cart UX prototype — cross-selling and recommendations"
+  version: "0.1.0"
+
+paths:
+  specs: "specs/changes"
+  templates: "specs/_templates"
+  adrs: "docs/adr"
+  domain: "specs/domain"
+  checks: "specs/checks"
+
+schema:
+  version: "1.0.0"
+
+classification:
+  core_triggers:
+    - touches_persistence
+    - touches_auth
+  default_reversibility: "trivial"
+
+teams:
+  - name: "product-experience"
+    type: "stream-aligned"
+    bounded_contexts: ["smart-cart"]
+
+# Cross-repo upstream dependencies
+# The AI reads these to know about backend invariants and entities.
+# When you run `evospec check` or `check_invariant_impact`, it includes
+# invariants from these upstream repos automatically.
+upstreams:
+  - name: "order-service"
+    path: "../order-service"
+  - name: "inventory-service"
+    path: "../inventory-service"
+
+fitness_functions:
+  run_command: "npm test"
+  test_runner: "jest"
+  ci_gate: false
+
+reverse:
+  framework: ""
+  source_dirs:
+    - "src"
+
+strategy:
+  winning_aspiration: "Delightful cart experience that drives AOV through smart recommendations"
+  where_to_play: "E-commerce checkout UX"
+  how_to_win: "Fast prototyping, continuous discovery, data-driven cross-selling"

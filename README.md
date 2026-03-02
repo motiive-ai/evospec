@@ -114,13 +114,15 @@ evospec check
 evospec reverse api --framework fastapi
 ```
 
-> **See [`examples/`](examples/) for a complete worked project** — a fictional e-commerce platform with a core zone spec (Order Management) and an edge zone spec (Smart Recommendations), fully filled in with all artifacts.
+> **See [`examples/`](examples/) for worked projects:**
+> - [`evospec-structure/`](examples/evospec-structure/) — complete EvoSpec project structure with core + edge specs, domain glossary, context map, ADRs, and fitness functions
+> - [`multi-system-ux-discovery/`](examples/multi-system-ux-discovery/) — two backends (Java/Spring Boot + Python/FastAPI) + UX prototype (React/TS) with cross-spec invariant checking
 
 ## Project Structure (after `evospec init`)
 
 ```
 your-project/
-├── .windsurf/workflows/     # Windsurf/Cascade slash commands
+├── .windsurf/workflows/     # Windsurf/Cascade slash commands (auto-generated)
 │   ├── evospec.discover.md  #   /evospec.discover — create discovery spec
 │   ├── evospec.learn.md     #   /evospec.learn — record experiment results
 │   ├── evospec.improve.md   #   /evospec.improve — plan a known improvement
@@ -130,7 +132,10 @@ your-project/
 │   ├── evospec.implement.md #   /evospec.implement — execute tasks
 │   ├── evospec.check.md     #   /evospec.check — validate & run fitness functions
 │   └── evospec.adr.md       #   /evospec.adr — create architecture decision record
-├── CLAUDE.md                # Claude Code project context (auto-read)
+├── .cursor/rules/           # Cursor rules (auto-generated)
+│   ├── evospec.mdc          #   Always-on project context
+│   └── evospec-*.mdc        #   Per-workflow rules (activated on spec files)
+├── CLAUDE.md                # Claude Code project context (auto-generated)
 ├── specs/
 │   ├── _templates/          # Customizable templates
 │   ├── changes/             # Change specs (organized by date/name)
@@ -141,13 +146,16 @@ your-project/
 │   │       ├── tasks.md            # AI-executable implementation tasks
 │   │       └── checks/             # Executable guardrails
 │   └── domain/              # Living domain model
+│       ├── entities.yaml    # Domain entity registry (fields, relationships, invariants)
+│       ├── contexts.yaml    # Bounded contexts (owner, type, description)
+│       ├── features.yaml    # Feature lifecycle registry
 │       ├── glossary.md      # Ubiquitous language (DDD)
 │       └── context-map.md   # Bounded context relationships
 ├── docs/
 │   └── adr/                 # Architecture Decision Records
 │       ├── 0001-adopt-evospec.md
 │       └── ...
-└── evospec.yaml             # Project configuration
+└── evospec.yaml             # Project configuration (lean — domain data in specs/domain/)
 ```
 
 ## Three Entry Points
@@ -204,7 +212,38 @@ Slash commands for the full delivery loop:
 
 ### Claude Code
 
-Reads `CLAUDE.md` automatically. Contains project context, two-layer model, spec structure, and implementation rules for each zone.
+Reads `CLAUDE.md` automatically. Contains all workflow procedures, MCP tools/resources, implementation rules — identical behavior to Windsurf workflows.
+
+### Cursor
+
+Reads `.cursor/rules/evospec.mdc` (always-on project context) + per-workflow rules in `.cursor/rules/evospec-*.mdc` (activated when editing spec files).
+
+### Platform-Agnostic: Canonical Workflow Specs
+
+All AI agent integration files are **auto-generated** from a single source of truth:
+
+```
+src/evospec/templates/workflows/    ← canonical YAML specs (edit here)
+├── _context.yaml                   ← shared: framework, zones, MCP, CLI, entities
+├── discover.yaml                   ← 9 workflow definitions
+├── improve.yaml
+├── fix.yaml
+├── contract.yaml
+├── tasks.yaml
+├── implement.yaml
+├── learn.yaml
+├── check.yaml
+└── adr.yaml
+
+evospec generate agents             ← generates all platforms at once
+
+.windsurf/workflows/evospec.*.md    ← Windsurf output (9 files)
+CLAUDE.md                           ← Claude Code output (1 file)
+.cursor/rules/evospec*.mdc          ← Cursor output (10 files)
+```
+
+To regenerate after editing canonical specs: `evospec generate agents`
+To generate for a single platform: `evospec generate agents --platform cursor`
 
 ### MCP Server (Any Agent)
 
@@ -234,9 +273,41 @@ evospec-mcp
 | `update_assumption(path, id, ...)` | Update assumption status or pivot direction |
 | `run_fitness_functions(path?)` | Execute fitness function tests |
 
-**Resources**: `evospec://config`, `evospec://glossary`, `evospec://context-map`, `evospec://invariants`
+**Resources**: `evospec://config`, `evospec://glossary`, `evospec://context-map`, `evospec://invariants`, `evospec://entities`
 
 Any MCP-compatible agent (Claude Code, Cursor, custom agents) can connect to the server and use these tools directly.
+
+## Cross-Repo Sharing
+
+In real-world systems, each service lives in its own repository with its own `evospec.yaml`. Downstream repos (e.g., a UX prototype) reference upstream repos to see their entities and invariants:
+
+```yaml
+# In smart-cart-ui/evospec.yaml:
+upstreams:
+  - name: "order-service"
+    path: "../order-service"       # relative path to sibling repo
+  - name: "inventory-service"
+    path: "../inventory-service"
+```
+
+This enables:
+- `evospec check` includes upstream invariants in cross-spec checks
+- `evospec://entities` MCP resource includes upstream entities
+- `check_invariant_impact()` checks upstream invariants too
+- AI agents see the full domain picture across repos
+
+> See [`examples/multi-system-ux-discovery/`](examples/multi-system-ux-discovery/) for a worked example with 3 separate services.
+
+## Changes vs Features
+
+A **change** is the unit of work — it lives in `specs/changes/YYYY-MM-DD-slug/`. A **feature** is a product capability tracked across its lifecycle in `specs/domain/features.yaml`.
+
+- A change can **create** a feature (experiment discovers something worth building)
+- A change can **advance** a feature (improvement or implementation)
+- A change can **fix** a feature (bugfix)
+- A change can have **nothing to do with features** (e.g., tech debt, infra, refactoring)
+
+Not every change is a feature. Features are optional — changes are always tracked.
 
 ## Continuous Discovery Loop
 

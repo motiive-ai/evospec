@@ -1,0 +1,111 @@
+# EvoSpec Change Specification — Smart Cart UX Experiment
+id: "smart-cart-ux"
+title: "Smart Cart: Real-time Availability + One-Click Checkout"
+zone: "edge"
+change_type: "experiment"
+status: "in-progress"
+created_at: "2026-03-01"
+updated_at: "2026-03-01"
+
+classification:
+  touches_persistence: false
+  touches_auth: false
+  touches_billing: false
+  touches_audit: false
+  touches_multi_tenancy: false
+  crosses_context_boundary: true
+  is_hypothesis: true
+  reversibility: "trivial"
+  risk_level: "low"
+  rationale: >
+    Pure UX experiment. The prototype is a React app that talks to existing backend APIs.
+    No schema changes. No new backend code. Fully reversible (just remove the UI).
+    BUT: the checkout flow crosses Order and Inventory bounded contexts.
+
+invariant_impact:
+  conflicts:
+    - invariant_id: "ORD-INV-001"
+      spec: "Order Service Core Domain"
+      reason: "UX checkout flow does not enforce minimum 1 LineItem before checkout"
+      resolution: "shadow"
+      notes: "Validate in UI before calling backend — disable checkout button when cart is empty"
+    - invariant_id: "ORD-INV-003"
+      spec: "Order Service Core Domain"
+      reason: "One-click checkout creates order then authorizes payment; backend requires payment before confirmation"
+      resolution: "redesign"
+      notes: "Call payment authorization first, then confirm order — matches backend state machine"
+    - invariant_id: "INV-INV-003"
+      spec: "Inventory Service Core Domain"
+      reason: "UX does not handle 30-minute reservation expiry; user may see stale availability"
+      resolution: "shadow"
+      notes: "Add countdown timer in UI showing reservation expiry"
+    - invariant_id: "INV-INV-002"
+      spec: "Inventory Service Core Domain"
+      reason: "If payment fails after stock reservation, reserved_quantity is not released"
+      resolution: "exempt"
+      notes: "Backend already handles this via scheduled job, but UI should show rollback state"
+  entities_touched:
+    - "Order"
+    - "LineItem"
+    - "Product"
+    - "StockReservation"
+  contexts_touched:
+    - "Orders"
+    - "Inventory"
+  reviewed: true
+
+bounded_context: "Smart Cart (new, edge)"
+
+ownership:
+  team: "Product Discovery"
+  team_type: "stream-aligned"
+  interaction_mode: "collaboration"
+
+discovery:
+  outcome: "Increase cart-to-checkout conversion by 25% through real-time availability and one-click checkout"
+  opportunity: "Users abandon carts when they discover items are out of stock at checkout. Current checkout is 5 steps."
+  kill_criteria: "If cart-to-checkout conversion does not improve by ≥10% after 2 weeks of A/B testing"
+  assumptions:
+    - id: "A001"
+      statement: "Users abandon carts primarily due to out-of-stock surprises at checkout"
+      risk: "high"
+      test_method: "User interviews + funnel analytics"
+      status: "testing"
+    - id: "A002"
+      statement: "One-click checkout reduces friction enough to improve conversion"
+      risk: "medium"
+      test_method: "A/B test with prototype"
+      status: "untested"
+    - id: "A003"
+      statement: "Real-time availability checking does not degrade UX performance"
+      risk: "low"
+      test_method: "Performance testing"
+      status: "untested"
+
+strategic_fit:
+  winning_aspiration: "Frictionless purchasing experience"
+  where_to_play: "Mobile and desktop web checkout"
+  how_to_win: "Real-time feedback + minimal steps"
+
+invariants: []
+
+fitness_functions: []
+
+adrs: []
+
+traceability:
+  endpoints:
+    - "GET /api/products/{product_id}/availability"
+    - "POST /api/orders/"
+    - "POST /api/orders/{orderId}/items"
+    - "POST /api/orders/{orderId}/checkout"
+    - "POST /api/reservations"
+    - "POST /api/reservations/{reservation_id}/confirm"
+    - "POST /api/payments/authorize"
+  tables: []
+  modules:
+    - "smart-cart-ui/src/components/SmartCart.tsx"
+    - "smart-cart-ui/src/hooks/useCart.ts"
+    - "smart-cart-ui/src/api/client.ts"
+  events: []
+  migrations: []

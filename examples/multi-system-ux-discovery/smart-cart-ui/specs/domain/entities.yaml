@@ -1,0 +1,23 @@
+# Domain Entity Registry — Smart Cart UI
+# The UX layer has its own lightweight entities (UI state, not persisted).
+# Backend entities come from upstreams (order-service, inventory-service).
+
+- name: "CartView"
+  context: "smart-cart"
+  aggregate_root: true
+  description: "Client-side cart state. Aggregates product selections, quantities, and recommendation slots. Not persisted — lives in browser state."
+  fields:
+    - name: "items"
+      type: "Array<CartItem>"
+      constraints: "max 50 items"
+    - name: "recommendations"
+      type: "Array<Recommendation>"
+      constraints: "max 6 visible"
+    - name: "total"
+      type: "Decimal"
+      constraints: "computed from items"
+  relationships:
+    - target: "Product"
+      type: "references"
+    - target: "Order"
+      type: "references"

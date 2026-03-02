@@ -1,0 +1,6 @@
+# Bounded Contexts — Inventory Service
+
+- name: "Inventory"
+  owner: "supply-chain"
+  type: "core"
+  description: "Product catalog and stock management. Owns Product and StockReservation entities."

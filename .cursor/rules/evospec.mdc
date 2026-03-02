@@ -1,0 +1,66 @@
+---
+description: EvoSpec framework context — spec-driven delivery with zones, invariants, and fitness functions
+globs:
+alwaysApply: true
+---
+
+# EvoSpec
+
+**Core principle**: Progressive specs at the edge. Contracts in the core.
+
+## Two Layers
+
+- **Discovery Layer** (edge): Mystery → Heuristic — Design Thinking + Continuous Discovery
+- **Core Engine** (core): Heuristic → Algorithm — DDD + Evolutionary Architecture
+
+## Zones
+
+- **edge**: discovery-spec.md, spec.yaml with discovery section | Metrics + kill criteria
+- **hybrid**: discovery-spec.md + domain-contract.md (minimal) | Contract tests at boundaries
+- **core**: domain-contract.md, spec.yaml with invariants + fitness_functions | Fitness functions + CI gates
+
+## Entry Points
+
+- **Experiment**: Unknown if users want it → discovery-spec.md, spec.yaml
+- **Improvement**: Known need, known solution → improvement-scope.md, spec.yaml, tasks.md
+- **Bug fix**: Something is broken → bugfix-report.md, spec.yaml, tasks.md
+
+All entry points MUST run invariant impact check before proceeding.
+
+## Invariant Resolutions
+
+- **exempt** — Experiment behind a feature flag, don't touch the invariant
+- **evolve** — Propose INV-001-v2 with migration path + new fitness function
+- **shadow** — Validate need via interviews/analytics BEFORE touching schema
+- **redesign** — Change approach to avoid the conflict
+
+## Implementation Rules
+
+### Core zone:
+- Invariants are non-negotiable — every invariant in spec.yaml must be enforced
+- Write fitness functions FIRST (TDD for core)
+- Check authorization rules in domain-contract.md before implementing endpoints
+- Respect state machine transitions — forbidden transitions must raise errors
+- Tenant isolation: every query on tenant-scoped entities must filter by tenant_id
+
+### Edge zone:
+- Prototype quality is acceptable — focus on validating the hypothesis
+- Instrument metrics to test assumptions listed in discovery-spec.md
+- Respect kill criteria — don't over-invest before validation
+- Keep it reversible — edge changes should be easy to remove
+
+## Entity Registry
+
+Check `evospec://entities` for canonical entity names. evospec check validates entities_touched against registered entities.
+
+## MCP Server
+
+Start: `evospec serve`
+
+Resources: evospec://config, evospec://glossary, evospec://context-map, evospec://invariants, evospec://entities
+
+## Knowledge Funnel
+
+- Mystery → Prototype and learn, don't codify yet
+- Heuristic → Document as invariant candidate, test it
+- Algorithm → Enforce with a fitness function

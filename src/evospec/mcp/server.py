@@ -56,6 +56,74 @@ def get_context_map() -> str:
     return "No context map found."
 
 
+@mcp.resource("evospec://entities")
+def get_entity_registry() -> str:
+    """Return the domain entity registry — canonical list of all domain entities, their contexts, fields, and relationships."""
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    config = load_config(root)
+    entities = config.get("domain", {}).get("entities", [])
+
+    # Include upstream entities
+    for name, upstream in config.get("_upstreams", {}).items():
+        for ent in upstream.get("entities", []):
+            ent_copy = dict(ent)
+            ent_copy["_upstream"] = name
+            entities.append(ent_copy)
+
+    if not entities:
+        return "No entities defined. Add specs/domain/entities.yaml or run `evospec reverse db`."
+
+    lines = ["# Domain Entity Registry", ""]
+    lines.append(f"Total: {len(entities)} entities.\n")
+
+    # Group by context
+    by_context: dict[str, list[dict]] = {}
+    for ent in entities:
+        ctx = ent.get("context", "unassigned")
+        by_context.setdefault(ctx, []).append(ent)
+
+    for ctx, ctx_entities in sorted(by_context.items()):
+        lines.append(f"## Context: {ctx}")
+        lines.append("")
+        for ent in ctx_entities:
+            name = ent.get("name", "?")
+            table = ent.get("table", "")
+            agg = " (aggregate root)" if ent.get("aggregate_root") else ""
+            lines.append(f"### {name}{agg}")
+            if table:
+                lines.append(f"Table: `{table}`")
+
+            fields = ent.get("fields", [])
+            if fields:
+                lines.append("")
+                lines.append("| Field | Type | Constraints |")
+                lines.append("|-------|------|-------------|")
+                for f in fields:
+                    constraints = f.get("constraints", "")
+                    lines.append(f"| {f.get('name', '?')} | {f.get('type', '?')} | {constraints} |")
+
+            rels = ent.get("relationships", [])
+            if rels:
+                lines.append("")
+                lines.append("Relationships:")
+                for r in rels:
+                    lines.append(f"- → {r.get('target', '?')} ({r.get('type', '?')})")
+
+            inv_refs = ent.get("invariants", [])
+            if inv_refs:
+                lines.append("")
+                lines.append(f"Invariants: {', '.join(inv_refs)}")
+
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 @mcp.resource("evospec://invariants")
 def get_all_invariants() -> str:
     """Return all invariants from all core/hybrid specs — the safety net for experiments."""
@@ -575,15 +643,15 @@ def update_task(spec_path: str, task_id: str, done: bool) -> dict:
 
 @mcp.tool()
 def list_features() -> dict:
-    """List all registered features from evospec.yaml with their lifecycle status."""
-    import yaml
+    """List all registered features with their lifecycle status."""
+    from evospec.core.config import load_config
 
     root = _find_root()
     if root is None:
         return {"error": "No evospec.yaml found."}
 
-    config = yaml.safe_load((root / "evospec.yaml").read_text()) or {}
-    features = config.get("features", [])
+    config = load_config(root)
+    features = config.get("features", []) or []
 
     return {
         "features": features,

@@ -1,0 +1,23 @@
+# Features Registry — E-Commerce Platform
+
+- id: "feat-001"
+  title: "Order Management CRUD API"
+  zone: "core"
+  status: "implementing"
+  knowledge_stage: "algorithm"
+  spec_path: "specs/changes/2025-06-01-order-management"
+  owner: "commerce-core"
+  created_at: "2025-06-01"
+  shipped_at: ""
+  kill_reason: ""
+
+- id: "feat-002"
+  title: "Smart Product Recommendations"
+  zone: "edge"
+  status: "discovery"
+  knowledge_stage: "mystery"
+  spec_path: "specs/changes/2026-03-01-smart-recommendations"
+  owner: "growth"
+  created_at: "2026-03-01"
+  shipped_at: ""
+  kill_reason: ""

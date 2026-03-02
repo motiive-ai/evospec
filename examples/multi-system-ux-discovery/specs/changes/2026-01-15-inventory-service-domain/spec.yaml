@@ -1,0 +1,103 @@
+# EvoSpec Change Specification — Inventory Service Domain
+id: "inventory-service-domain"
+title: "Inventory Service Core Domain"
+zone: "core"
+change_type: "improvement"
+status: "accepted"
+created_at: "2026-01-15"
+updated_at: "2026-01-15"
+
+classification:
+  touches_persistence: true
+  touches_auth: false
+  touches_billing: false
+  touches_audit: false
+  touches_multi_tenancy: false
+  crosses_context_boundary: false
+  is_hypothesis: false
+  reversibility: "difficult"
+  risk_level: "high"
+  rationale: "Core inventory management. Incorrect stock counts cause overselling. Schema changes are hard to reverse."
+
+invariant_impact:
+  conflicts: []
+  entities_touched: []
+  contexts_touched: []
+  reviewed: true
+
+bounded_context: "Inventory"
+
+ownership:
+  team: "Supply Chain"
+  team_type: "stream-aligned"
+  interaction_mode: "x-as-a-service"
+
+strategic_fit:
+  winning_aspiration: "Zero overselling, real-time availability"
+  where_to_play: "All channels that sell physical products"
+  how_to_win: "Pessimistic stock locking with time-bounded reservations"
+  capability_strengthened: "Stock accuracy and availability"
+
+invariants:
+  - id: "INV-INV-001"
+    statement: "Product stock_quantity MUST NOT go below zero"
+    enforcement: "database-constraint"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+  - id: "INV-INV-002"
+    statement: "Product reserved_quantity MUST NOT exceed stock_quantity"
+    enforcement: "domain-logic"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+  - id: "INV-INV-003"
+    statement: "StockReservation MUST be released or confirmed within 30 minutes of creation"
+    enforcement: "scheduled-job"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+  - id: "INV-INV-004"
+    statement: "A confirmed StockReservation MUST permanently decrement stock_quantity"
+    enforcement: "domain-logic"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+  - id: "INV-INV-005"
+    statement: "StockReservation quantity MUST be greater than zero"
+    enforcement: "schema-validation"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+  - id: "INV-INV-006"
+    statement: "A released or expired StockReservation MUST restore reserved_quantity to Product"
+    enforcement: "domain-logic"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+  - id: "INV-INV-007"
+    statement: "Product availability check MUST account for both stock_quantity and reserved_quantity"
+    enforcement: "domain-logic"
+    fitness_function: "tests/fitness/test_inventory_invariants.py"
+
+fitness_functions:
+  - id: "INV-FF-001"
+    name: "Stock integrity invariant enforcement"
+    type: "integration-test"
+    path: "tests/fitness/test_inventory_invariants.py"
+    dimension: "data-integrity"
+  - id: "INV-FF-002"
+    name: "Reservation lifecycle contract tests"
+    type: "contract-test"
+    path: "tests/fitness/test_reservation_contract.py"
+    dimension: "temporal-coupling"
+
+adrs: []
+
+traceability:
+  endpoints:
+    - "GET /api/products/{product_id}"
+    - "GET /api/products"
+    - "POST /api/products"
+    - "PUT /api/products/{product_id}/stock"
+    - "GET /api/products/{product_id}/availability"
+    - "POST /api/reservations"
+    - "DELETE /api/reservations/{reservation_id}"
+    - "POST /api/reservations/{reservation_id}/confirm"
+    - "GET /api/reservations/order/{order_id}"
+  tables:
+    - "products"
+    - "stock_reservations"
+  modules:
+    - "app.main"
+    - "app.models"
+  events: []
+  migrations: []

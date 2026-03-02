@@ -161,12 +161,12 @@
         },
         "team_type": {
           "type": "string",
-          "enum": ["stream-aligned", "platform", "enabling", "complicated-subsystem"],
+          "enum": ["", "stream-aligned", "platform", "enabling", "complicated-subsystem"],
           "description": "Team Topologies team type."
         },
         "interaction_mode": {
           "type": "string",
-          "enum": ["x-as-a-service", "collaboration", "facilitating"],
+          "enum": ["", "x-as-a-service", "collaboration", "facilitating"],
           "description": "How this team interacts with other teams for this change."
         }
       }
@@ -210,7 +210,7 @@
           },
           "enforcement": {
             "type": "string",
-            "enum": ["test", "ci-check", "schema-validation", "policy", "manual-review"],
+            "enum": ["test", "ci-check", "schema-validation", "policy", "manual-review", "api-validation", "domain-logic", "state-machine", "database-constraint", "scheduled-job", "event-handler"],
             "description": "How this invariant is enforced."
           },
           "fitness_function": {
@@ -296,7 +296,7 @@
       "properties": {
         "current_phase": {
           "type": "string",
-          "enum": ["empathize", "define", "ideate", "prototype", "test"],
+          "enum": ["", "empathize", "define", "ideate", "prototype", "test"],
           "description": "Current Design Thinking phase."
         },
         "empathy_artifacts": {
