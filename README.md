@@ -24,6 +24,33 @@ A single EvoSpec change spec captures **everything that matters** — from board
 
 Other frameworks give you a template and wish you luck. EvoSpec gives you executable guardrails — fitness functions that run in CI, invariant safety nets that prevent experiments from breaking core domain logic, and kill criteria that stop you from over-investing in ideas that don't work.
 
+## Manifesto
+
+Most spec frameworks assume you know what you're building before you build it. EvoSpec doesn't.
+
+### Discovery is messy. Let it be messy. Capture when it crystallizes.
+
+A UX designer exploring a smart cart prototype doesn't need a domain contract. A developer refactoring a payment state machine doesn't need a discovery spec. Forcing the wrong artifact at the wrong time produces shelfware — documents nobody reads because they were written to satisfy a process, not to solve a problem.
+
+EvoSpec adapts to how work actually happens:
+
+**Principle 1: Never force documentation before the user is ready.**
+Experimental work starts with a conversation, not a template. The AI helps you model entities, explore design options, and iterate. You build a prototype. You test it. Only when you're confident do you formalize — and even then, the AI does the writing by scanning your code (`/evospec.capture`).
+
+**Principle 2: Rigor follows risk, not ritual.**
+An edge experiment behind a feature flag needs kill criteria and metrics. A core domain change touching the order state machine needs invariants, fitness functions, and a migration plan. Same framework, different rigor — automatically matched to the zone.
+
+**Principle 3: Specs are for humans and machines.**
+Every artifact is designed to be read by humans and parsed by AI agents. The AI doesn't just help you write specs — it enforces them. Fitness functions run in CI. Invariant checks run before every change. Kill criteria trigger before you over-invest.
+
+**Principle 4: One source of truth, every platform.**
+Workflows are defined once in canonical YAML and auto-generated for Windsurf, Claude Code, Cursor, and any future platform. The result is identical regardless of which AI tool you use.
+
+**Principle 5: Knowledge flows across boundaries.**
+Each service owns its domain. Downstream teams see upstream entities and invariants automatically. When a UX team's experiment touches a core entity, the AI flags the conflict before a single line of code is written.
+
+---
+
 ## Why
 
 Modern software teams face a paradox:
