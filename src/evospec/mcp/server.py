@@ -474,12 +474,39 @@ def check_invariant_impact(
 
             # Check for conflict: entity overlap, context overlap, or keyword match
             reasons = []
+            scope = inv.get("scope", "entity")
 
             for entity in entities:
                 if entity in statement_lower:
                     reasons.append(f"touches entity '{entity}' mentioned in invariant")
                 if entity in spec_entities:
                     reasons.append(f"touches entity '{entity}' in same spec")
+
+                # Relationship invariant: check source/target
+                if scope == "relationship":
+                    inv_source = (inv.get("source") or "").lower()
+                    inv_target = (inv.get("target") or "").lower()
+                    card = inv.get("cardinality", "")
+                    if entity == inv_source:
+                        reasons.append(
+                            f"touches source entity of cardinality constraint "
+                            f"({inv_source} → {inv_target}: {card})"
+                        )
+                    if entity == inv_target:
+                        reasons.append(
+                            f"touches target entity of cardinality constraint "
+                            f"({inv_source} → {inv_target}: {card})"
+                        )
+
+                # Transition invariant: check entity
+                if scope == "transition":
+                    inv_entity = (inv.get("entity") or "").lower()
+                    inv_field = inv.get("field", "")
+                    if entity == inv_entity:
+                        reasons.append(
+                            f"touches entity with state machine constraint "
+                            f"({inv_entity}.{inv_field})"
+                        )
 
             for ctx in contexts:
                 if ctx == bc:
@@ -1318,11 +1345,30 @@ def _build_invariants_text(context: str | None = None) -> str:
             statement = inv.get("statement", "")
             enforcement = inv.get("enforcement", "")
             ff = inv.get("fitness_function", "")
-            lines.append(f"- **{inv_id}**: {statement}")
+            scope = inv.get("scope", "entity")
+            lines.append(f"- **{inv_id}** [scope: {scope}]: {statement}")
             if enforcement:
                 lines.append(f"  - Enforcement: {enforcement}")
             if ff:
                 lines.append(f"  - Fitness function: `{ff}`")
+            # Relationship-specific fields
+            if scope == "relationship":
+                source = inv.get("source", "")
+                target = inv.get("target", "")
+                card = inv.get("cardinality", "")
+                lines.append(f"  - Relationship: {source} → {target} ({card})")
+            # Transition-specific fields
+            elif scope == "transition":
+                entity = inv.get("entity", "")
+                field = inv.get("field", "")
+                lines.append(f"  - State machine: {entity}.{field}")
+                for t in inv.get("transitions", []):
+                    to_states = ", ".join(t["to"]) if isinstance(t.get("to"), list) else t.get("to", "")
+                    lines.append(f"    - {t.get('from', '?')} → [{to_states}]")
+                for f in inv.get("forbidden", []):
+                    to_val = f.get("to", "?")
+                    reason = f.get("reason", "")
+                    lines.append(f"    - ✗ {f.get('from', '?')} → {to_val} (forbidden: {reason})")
             count += 1
 
         lines.append("")

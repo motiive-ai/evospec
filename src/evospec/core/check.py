@@ -163,6 +163,140 @@ def run_checks(strict: bool = False) -> None:
         raise SystemExit(1)
 
 
+VALID_CARDINALITIES = {"0..1", "1..1", "0..*", "1..*"}
+
+
+def _parse_cardinality(card: str) -> bool:
+    """Check if a cardinality string is valid: 0..1, 1..1, 0..*, 1..*, or N..M."""
+    if card in VALID_CARDINALITIES:
+        return True
+    # N..M pattern
+    parts = card.split("..")
+    if len(parts) == 2:
+        try:
+            int(parts[0])
+            int(parts[1])
+            return True
+        except ValueError:
+            return False
+    return False
+
+
+def _validate_scoped_invariants(invariants: list[dict]) -> tuple[int, int]:
+    """Validate relational and transition invariant schemas (REL-INV-SCHEMA-001, REL-INV-SCHEMA-002)."""
+    errors = 0
+    warnings = 0
+
+    for inv in invariants:
+        scope = inv.get("scope", "entity")
+        inv_id = inv.get("id", "?")
+
+        if scope == "relationship":
+            missing = []
+            if not inv.get("source"):
+                missing.append("source")
+            if not inv.get("target"):
+                missing.append("target")
+            if not inv.get("cardinality"):
+                missing.append("cardinality")
+            if missing:
+                console.print(
+                    f"  [red]✗ {inv_id}: relationship invariant missing required field(s): "
+                    f"{', '.join(missing)}[/red]"
+                )
+                errors += len(missing)
+            else:
+                card = inv["cardinality"]
+                if not _parse_cardinality(card):
+                    console.print(
+                        f"  [yellow]⚠ {inv_id}: invalid cardinality '{card}' "
+                        f"(expected 0..1, 1..1, 0..*, 1..*, or N..M)[/yellow]"
+                    )
+                    warnings += 1
+
+        elif scope == "transition":
+            missing = []
+            if not inv.get("entity"):
+                missing.append("entity")
+            if not inv.get("field"):
+                missing.append("field")
+            if not inv.get("transitions"):
+                missing.append("transitions")
+            if missing:
+                console.print(
+                    f"  [red]✗ {inv_id}: transition invariant missing required field(s): "
+                    f"{', '.join(missing)}[/red]"
+                )
+                errors += len(missing)
+            else:
+                # Validate transition structure
+                for i, t in enumerate(inv["transitions"]):
+                    if not t.get("from"):
+                        console.print(
+                            f"  [yellow]⚠ {inv_id}: transition[{i}] missing 'from' field[/yellow]"
+                        )
+                        warnings += 1
+                    if not t.get("to"):
+                        console.print(
+                            f"  [yellow]⚠ {inv_id}: transition[{i}] missing 'to' field[/yellow]"
+                        )
+                        warnings += 1
+
+        elif scope != "entity":
+            console.print(
+                f"  [yellow]⚠ {inv_id}: unknown scope '{scope}' "
+                f"(expected entity, relationship, or transition)[/yellow]"
+            )
+            warnings += 1
+
+    return errors, warnings
+
+
+def _validate_invariants_against_entities(
+    invariants: list[dict], config: dict,
+) -> tuple[int, int]:
+    """Cross-reference relational invariant source/target against entities.yaml."""
+    errors = 0
+    warnings = 0
+
+    entities = config.get("domain", {}).get("entities", [])
+    if not entities:
+        return 0, 0
+
+    entity_names = {e.get("name", "").lower() for e in entities}
+
+    for inv in invariants:
+        scope = inv.get("scope", "entity")
+        inv_id = inv.get("id", "?")
+
+        if scope == "relationship":
+            source = inv.get("source", "")
+            target = inv.get("target", "")
+            if source and source.lower() not in entity_names:
+                console.print(
+                    f"    [yellow]⚠ {inv_id}: source entity '{source}' "
+                    f"not found in domain registry[/yellow]"
+                )
+                warnings += 1
+            if target and target.lower() not in entity_names:
+                console.print(
+                    f"    [yellow]⚠ {inv_id}: target entity '{target}' "
+                    f"not found in domain registry[/yellow]"
+                )
+                warnings += 1
+
+        elif scope == "transition":
+            entity = inv.get("entity", "")
+            if entity and entity.lower() not in entity_names:
+                console.print(
+                    f"    [yellow]⚠ {inv_id}: entity '{entity}' "
+                    f"not found in domain registry[/yellow]"
+                )
+                warnings += 1
+
+    return errors, warnings
+
+
 def _check_core(spec: dict, spec_dir: Path) -> tuple[int, int]:
     """Check core zone requirements."""
     errors = 0
@@ -184,6 +318,11 @@ def _check_core(spec: dict, spec_dir: Path) -> tuple[int, int]:
                     f"  [yellow]⚠ Invariant {inv.get('id', '?')} has no enforcement mechanism[/yellow]"
                 )
                 warnings += 1
+
+        # Validate relational and transition invariant schemas
+        e, w = _validate_scoped_invariants(invariants)
+        errors += e
+        warnings += w
 
     fitness = spec.get("fitness_functions", [])
     if not fitness:
@@ -330,6 +469,19 @@ def _check_entity_registry(
                 console.print(f"    [yellow]⚠[/yellow] {w}")
             warnings += len(spec_warnings)
             console.print()
+
+        # Cross-reference relational/transition invariant entities against registry
+        spec_invariants = spec.get("invariants", [])
+        scoped = [inv for inv in spec_invariants if inv.get("scope") in ("relationship", "transition")]
+        if scoped:
+            _, inv_w = _validate_invariants_against_entities(spec_invariants, config)
+            if inv_w:
+                if not found_any:
+                    console.print("[bold]Entity registry validation[/bold]")
+                    console.print()
+                    found_any = True
+                console.print(f"  [bold]{title}[/bold] [dim]({zone})[/dim] — relational invariant cross-reference")
+            warnings += inv_w
 
     return warnings
 
