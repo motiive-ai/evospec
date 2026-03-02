@@ -11,6 +11,13 @@ Both backends have well-defined invariants (e.g., "an order must have at least o
 
 A **product designer** (non-programmer) wants to vibe-code a new UX: a "Smart Cart" that lets users build orders with real-time availability checking and one-click checkout. The designer will use an AI coding agent (Windsurf/Cursor) to build a React prototype and test it with users.
 
+### Two Personas
+
+| Persona | Example | How they use EvoSpec |
+|---------|---------|---------------------|
+| **Internal** — backend engineer maintaining a service | Order Service developer | Agent Skills for workflow, MCP tools for spec management |
+| **External** — designer/dev consuming upstream contracts | Product designer building Smart Cart UI | Agent Skills for discovery, MCP tools for entity/invariant/API visibility across systems |
+
 ### The Problem
 
 The designer's prototype might:
@@ -65,12 +72,30 @@ evospec new "smart-cart-ux" --zone edge --type experiment
 
 The discovery spec describes the hypothesis, assumptions, and kill criteria.
 
-### Step 4: Check invariant impact BEFORE building
+### Step 4: Explore upstream APIs and entities
 
-The designer's AI agent calls `check_invariant_impact` via MCP:
+The designer's AI agent uses MCP tools to understand the upstream systems:
 
 ```
-MCP call: check_invariant_impact(
+# What APIs are available from the backends?
+MCP call: evospec:get_upstream_apis(upstream_name="order-service")
+→ ["POST /orders", "GET /orders/{id}", "POST /orders/{id}/checkout", ...]
+
+# What entities exist in the order domain?
+MCP call: evospec:get_entities(upstream="order-service")
+→ Order (aggregate root), LineItem, Payment, ...
+
+# The designer has an API response file — parse it to understand entities
+MCP call: evospec:parse_contract_file("order-response.json")
+→ Extracted: Order{id, status, items[], total}, LineItem{product_id, qty, price}
+```
+
+### Step 5: Check invariant impact BEFORE building
+
+The designer's AI agent calls `evospec:check_invariant_impact` via MCP:
+
+```
+MCP call: evospec:check_invariant_impact(
   entities: ["Order", "LineItem", "Product", "StockReservation"],
   contexts: ["orders", "inventory"],
   description: "Smart Cart with real-time availability and one-click checkout"
@@ -82,14 +107,14 @@ MCP call: check_invariant_impact(
 - INV-003: "Stock reservation MUST be released within 30 minutes if not confirmed" — the UX needs a timer
 - INV-005: "Payment MUST be authorized before order status changes to confirmed" — one-click checkout must handle payment first
 
-### Step 5: The designer knows what to respect and what to propose
+### Step 6: The designer knows what to respect and what to propose
 
 The designer can now:
 - **Exempt** (use feature flags to avoid touching invariants during prototyping)
 - **Shadow** (build the UX against a mock, test with users, then propose backend changes)
 - **Propose** (create a hybrid spec requesting new backend capabilities)
 
-### Step 6: After user testing, generate backend requirements
+### Step 7: After user testing, generate backend requirements
 
 ```bash
 evospec new "smart-cart-backend-support" --zone hybrid --type improvement
@@ -106,6 +131,11 @@ This hybrid spec captures what the backends need to build, with clear traceabili
 > using AI agents to vibe-code prototypes.**
 
 The designer never needs to read Java or Python code. They just need to know:
-- What entities exist (via `evospec://invariants` MCP resource)
-- What rules they can't break (via `check_invariant_impact` MCP tool)
+- What APIs are available (via `evospec:get_upstream_apis` MCP tool)
+- What entities exist (via `evospec:get_entities` MCP tool)
+- What an API response means (via `evospec:parse_contract_file` MCP tool)
+- What rules they can't break (via `evospec:check_invariant_impact` MCP tool)
 - What they need to propose if the UX requires backend changes (via hybrid specs)
+
+All of this is accessible through **Agent Skills** (`evospec-discover`) which guide the AI agent
+through the discovery workflow, referencing the right MCP tools at each step.

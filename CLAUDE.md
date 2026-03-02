@@ -68,8 +68,8 @@ All three entry points **MUST** run the invariant impact check before proceeding
 - **shadow** — Validate need via interviews/analytics BEFORE touching schema
 - **redesign** — Change approach to avoid the conflict
 
-MCP tool: `check_invariant_impact(entities=[...], contexts=[...], description="...")`
-MCP resource: `evospec://invariants` — all invariants from core/hybrid specs
+MCP tool: `evospec:check_invariant_impact(entities=[...], contexts=[...], description="...")`
+MCP tool: `evospec:get_invariants(context?)` — all invariants from core/hybrid specs
 
 ---
 
@@ -1188,11 +1188,11 @@ Equivalent to Windsurf `/evospec.tasks`.
 
 Each entity defines: name, context, table, aggregate_root, description, fields (name/type/constraints), relationships (target/type), invariants (IDs)
 
-- MCP resource: `evospec://entities` — returns the full entity registry
+- MCP tool: `evospec:get_entities(context?, upstream?) — filtered entity registry`
 - `evospec reverse db` generates copy-pasteable YAML for this section
 - evospec check validates entities_touched against registered entities
 
-When creating specs, always check `evospec://entities` to use canonical entity names.
+When creating specs, call `evospec:get_entities()` to use canonical entity names.
 
 ## MCP Server (Programmatic Access)
 
@@ -1211,17 +1211,18 @@ Start with: `evospec serve`
 - `record_experiment(spec_path, assumption_id, ...) — log experiment results`
 - `update_assumption(spec_path, assumption_id, ...) — update assumption status`
 - `run_fitness_functions(spec_path?) — execute fitness function tests`
+- `get_entities(context?, upstream?) — filtered entity registry (by bounded context or upstream)`
+- `get_invariants(context?) — filtered invariants (by bounded context)`
+- `get_upstream_apis(upstream_name?) — list API endpoints from upstream services`
+- `parse_contract_file(file_path) — extract entities from OpenAPI/JSON Schema/JSON example files`
 
 **Resources** (context):
-- `evospec://config — project configuration`
+- `evospec://project — lean project metadata (name, description, paths)`
 - `evospec://glossary — ubiquitous language`
 - `evospec://context-map — bounded context relationships`
-- `evospec://invariants — all invariants from core/hybrid specs (the safety net)`
-- `evospec://entities — domain entity registry (canonical entity catalog)`
-
-**Prompts** (templates):
-- `discover_feature(description) — discovery spec generation prompt`
-- `domain_contract(bounded_context) — domain contract generation prompt`
+- `evospec://config — DEPRECATED alias for evospec://project (will be removed)`
+- `evospec://entities — DEPRECATED alias for get_entities() tool (will be removed)`
+- `evospec://invariants — DEPRECATED alias for get_invariants() tool (will be removed)`
 
 ## CLI Commands
 

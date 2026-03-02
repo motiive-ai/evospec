@@ -14,7 +14,7 @@
 | **Backend Team A** | Owns Order Service (Java/Spring Boot) | Created core spec with invariants |
 | **Backend Team B** | Owns Inventory Service (Python/FastAPI) | Created core spec with invariants |
 | **Product Designer** | Vibe-codes the Smart Cart UX prototype | Creates edge spec, checks invariant impact via MCP |
-| **AI Agent** (Windsurf/Cursor) | Builds the React prototype | Reads invariants via MCP, warns designer of conflicts |
+| **AI Agent** (Windsurf/Cursor) | Builds the React prototype | Activates `evospec-discover` skill, calls MCP tools, warns designer of conflicts |
 
 ---
 
@@ -102,13 +102,36 @@ The product designer opens Windsurf and says:
 > "Build me a React Smart Cart component with real-time product availability
 > and one-click checkout. Use these backend APIs..."
 
-The AI agent builds the prototype. Before writing code, the agent **reads the
-safety net** via EvoSpec's MCP server:
+The AI agent builds the prototype. Before writing code, the agent activates the
+`evospec-discover` skill and **reads the safety net** via EvoSpec's MCP tools:
 
-### The AI Agent's First Move: Check Invariant Impact
+### The AI Agent's First Move: Explore Upstream APIs and Entities
 
 ```
-MCP tool: check_invariant_impact(
+# Skill: evospec-discover, Step 3 — explore and model the domain
+
+# What APIs does the Order Service expose?
+MCP tool: evospec:get_upstream_apis(upstream_name="order-service")
+→ ["POST /api/orders/", "GET /api/orders/{orderId}", "POST /api/orders/{orderId}/checkout", ...]
+
+# What entities exist in the order domain?
+MCP tool: evospec:get_entities(upstream="order-service")
+→ Order (aggregate root), LineItem, Payment, ...
+
+# The designer has an API response file from the order service
+MCP tool: evospec:parse_contract_file("order-response.json")
+→ Extracted: Order{id, status, items[], total, customer_id}, LineItem{product_id, qty, price}
+
+# What invariants apply to the inventory context?
+MCP tool: evospec:get_invariants(context="inventory")
+→ INV-INV-001: Stock quantity MUST NOT go below zero, ...
+```
+
+### Then: Check Invariant Impact
+
+```
+# Skill: evospec-discover, Step 6 (CRITICAL) — check invariant impact
+MCP tool: evospec:check_invariant_impact(
   entities: ["Order", "LineItem", "Product", "StockReservation"],
   contexts: ["Orders", "Inventory"],
   description: "Smart Cart with real-time availability and one-click checkout"
@@ -264,7 +287,7 @@ MYSTERY                    HEURISTIC                     ALGORITHM
 ## What Made This Work
 
 1. **Reverse engineering extracted the safety net** — invariants, entities, and API contracts from real backend code
-2. **MCP served the safety net to the AI agent** — the agent checked `check_invariant_impact` before writing code
+2. **MCP tools served the safety net to the AI agent** — the agent called `evospec:get_upstream_apis`, `evospec:get_entities`, `evospec:parse_contract_file`, and `evospec:check_invariant_impact` before writing code
 3. **The edge spec was cheap to create** — just a hypothesis, kill criteria, and assumption list
 4. **Invariant conflicts were documented, not blocked** — the designer chose resolution strategies (shadow, redesign, exempt)
 5. **The experiment result flowed into a hybrid spec** — the backend teams got clear, validated requirements
@@ -282,8 +305,12 @@ MYSTERY                    HEURISTIC                     ALGORITHM
 | Reverse-engineer React/TS modules | ✅ | `evospec reverse cli --source smart-cart-ui` |
 | Core specs with invariants | ✅ | `spec.yaml` with `invariants:` section |
 | Edge specs with discovery | ✅ | `discovery-spec.md` with hypothesis/kill criteria |
-| Invariant impact checking (MCP) | ✅ | `check_invariant_impact` tool |
-| Invariant listing (MCP) | ✅ | `evospec://invariants` resource |
+| Invariant impact checking (MCP) | ✅ | `evospec:check_invariant_impact` tool |
+| Filtered entity registry (MCP) | ✅ | `evospec:get_entities(context?, upstream?)` tool |
+| Filtered invariant listing (MCP) | ✅ | `evospec:get_invariants(context?)` tool |
+| Upstream API discovery (MCP) | ✅ | `evospec:get_upstream_apis(upstream_name?)` tool |
+| Contract file parsing (MCP) | ✅ | `evospec:parse_contract_file(file_path)` tool |
+| Agent Skills (cross-platform) | ✅ | `evospec generate agents --platform skills` |
 | Spec validation | ✅ | `evospec check` |
 | Fitness function execution | ✅ | `evospec fitness` |
 | Feature lifecycle tracking | ✅ | `evospec feature add/update/list` |
@@ -293,11 +320,12 @@ MYSTERY                    HEURISTIC                     ALGORITHM
 
 | Gap | Impact | Proposed Enhancement |
 |-----|--------|---------------------|
-| **No `evospec reverse api` for the UX** — we can scan modules but not identify which backend APIs the UX calls | Medium | Add a `reverse deps` command that scans JS/TS `fetch()` calls and maps them to known backend endpoints |
-| **No cross-spec endpoint traceability** — we can't automatically detect that `smart-cart-ui` calls `POST /api/orders/` which belongs to the Order Service spec | High | Build a `check cross-deps` command that matches UX traceability.endpoints against core spec traceability.endpoints |
 | **No automatic invariant_impact in spec.yaml** — the designer has to manually call `check_invariant_impact` or the AI agent does it | Medium | Auto-run `check_invariant_impact` during `evospec check` for edge/hybrid specs that declare `contexts_touched` |
-| **No multi-repo support** — this example assumes all source is in one workspace | Medium | Support `reverse.source_dirs` pointing to absolute paths or git submodule paths |
 | **No "serve invariants as API"** — the MCP server requires running locally | Low | The MCP server already works; could add a REST mode for non-MCP clients |
 | **No reservation timer / temporal invariant UX hint** — the invariant says "30 minutes" but there's no structured way to extract temporal constraints | Low | Add a `temporal_constraint` field to invariants (e.g., `ttl: 30m`) |
 
-See the next section for implementation proposals for the high-impact gaps.
+*Previously identified gaps now addressed:*
+- ✅ Cross-system API visibility → `evospec:get_upstream_apis`
+- ✅ Contract file parsing → `evospec:parse_contract_file`
+- ✅ Cross-spec endpoint traceability → `evospec reverse deps` + `evospec check` cross-spec endpoint check
+- ✅ Multi-repo support → `upstreams[]` in evospec.yaml with per-service evospec projects
