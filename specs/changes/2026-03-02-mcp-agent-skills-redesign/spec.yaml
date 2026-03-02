@@ -31,6 +31,8 @@ invariant_impact:
     - "MCPResource"
     - "MCPTool"
     - "Skill"
+    - "ContractFile"
+    - "UpstreamAPI"
   contexts_touched:
     - "agent-integration"
     - "mcp-server"
@@ -77,6 +79,7 @@ traceability:
   modules:
     - "src/evospec/core/agents.py"
     - "src/evospec/mcp/server.py"
+    - "src/evospec/mcp/contract_parser.py"
     - "src/evospec/templates/workflows/_context.yaml"
     - "src/evospec/cli/main.py"
     - "examples/multi-system-ux-discovery/README.md"

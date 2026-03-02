@@ -49,6 +49,8 @@
 | AgentFile | platform, path, content | Generated output: platform-specific file (Windsurf .md, Claude CLAUDE.md, Cursor .mdc) |
 | MCPResource | uri, description, handler | Read-only context exposed to agents via MCP |
 | MCPTool | name, description, parameters, handler | Model-controlled action exposed to agents via MCP |
+| ContractFile | file_path, format, extracted_entities[] | API contract/response file parsed to extract entities |
+| UpstreamAPI | upstream_name, endpoints[], source_spec | API surface from an upstream service's traceability data |
 
 **Value Objects**:
 
@@ -56,6 +58,8 @@
 |-------------|--------|-------------|
 | SkillFrontmatter | name, description | name: 1-64 chars, lowercase+hyphens, must match directory name |
 | StepInstruction | id, title, instructions, interactive?, critical? | id must be sequential integer |
+| MCPToolReference | server_name, tool_name | Fully-qualified reference in Skills: `evospec:tool_name` |
+| ExtractedEntity | name, fields[], relationships[] | Entity parsed from a contract file (not persisted) |
 
 ---
 
@@ -70,6 +74,10 @@
 | AGT-INV-003 | MCP Tools that mutate state (write files, execute commands) MUST be clearly annotated as destructive | code-review | Manual review of tool docstrings |
 | AGT-INV-004 | Skills MUST reference shared context via `references/context.md`, not inline the full framework description | test | `tests/test_agents.py` |
 | AGT-INV-005 | `evospec generate agents` with no platform flag MUST generate Skills + all 3 legacy platform formats | test | `tests/test_agents.py` |
+| AGT-INV-006 | Skills MUST reference MCP tools by fully-qualified name (`evospec:tool_name`) in step instructions | test | `tests/test_agents.py` |
+| AGT-INV-007 | `get_entities()` and `get_invariants()` tools MUST support filtering by bounded context | test | `tests/test_mcp.py` |
+| AGT-INV-008 | `get_upstream_apis()` MUST return only data from upstream services' published traceability, never local project internals | test | `tests/test_mcp.py` |
+| AGT-INV-009 | `parse_contract_file()` MUST validate file exists and is a supported format before parsing | test | `tests/test_mcp.py` |
 
 ---
 
