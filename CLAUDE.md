@@ -1256,6 +1256,7 @@ Start with: `evospec serve`
 - `parse_contract_file(file_path) — extract entities from OpenAPI/JSON Schema/JSON example files`
 
 **Resources** (context):
+- `evospec://bootstrap — AI bootstrap prompt with project detection (works pre-init)`
 - `evospec://project — lean project metadata (name, description, paths)`
 - `evospec://glossary — ubiquitous language`
 - `evospec://context-map — bounded context relationships`
@@ -1280,6 +1281,7 @@ evospec feature add "title"              # Register a new feature
 evospec learn                            # Interactive experiment recording
 evospec adr new "decision-title"         # Create ADR
 evospec render                           # Render all specs into consolidated markdown
+evospec prompt --detect                  # AI bootstrap prompt (works pre-init)
 evospec serve                            # Start MCP server
 evospec generate agents                  # Generate AI agent integration files
 ```

@@ -29,7 +29,7 @@ See [references/context.md](references/context.md) for full framework context.
    - Read `implementation-spec.md` if it exists (skeleton from Tasks workflow)
    - Read `evospec.yaml` for project-level configuration
 
-3. **Pre-flight checks**
+3. **Pre-flight checks and user approval *(interactive)***
    - Count total tasks, completed tasks, remaining tasks
    - Identify current phase (first phase with incomplete tasks)
    - Check for blocking dependencies
@@ -41,6 +41,21 @@ See [references/context.md](references/context.md) for full framework context.
    Current Phase: [phase name]
    Remaining: [count] tasks
    ```
+   
+   **CRITICAL: Ask for explicit user approval before executing any tasks.**
+   
+   ```
+   Ready to implement. I'll start with Phase [N]: [name] ([count] tasks).
+   Shall I proceed?
+   ```
+   
+   The user may:
+   - Approve the full plan → proceed phase by phase
+   - Approve one phase at a time → execute only the current phase, then ask again
+   - Adjust → go back to tasks.md and modify
+   - Skip phases → jump to a specific phase
+   
+   **Do NOT write any code until the user confirms.**
 
 4. **Execute tasks phase by phase**
    For each phase (in order):
@@ -119,12 +134,14 @@ See [references/context.md](references/context.md) for full framework context.
 
 ## Rules
 
+- NEVER start implementing without explicit user approval — ask and wait for confirmation
 - NEVER skip fitness function tasks in core zone
 - ALWAYS mark completed tasks as [X] in tasks.md
 - ALWAYS run fitness functions after core entity implementation
 - Report progress after every phase
 - If tasks.md doesn't exist, do NOT improvise — instruct user to run the Tasks workflow
 - For core zone, treat failing fitness functions as blocking errors
+- The user may approve one phase at a time — do NOT assume blanket approval for all phases
 
 ---
 

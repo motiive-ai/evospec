@@ -53,6 +53,7 @@ Start: `evospec serve`
 - `evospec:parse_contract_file`
 
 **Resources** (ambient context):
+- `evospec://bootstrap`
 - `evospec://project`
 - `evospec://glossary`
 - `evospec://context-map`
