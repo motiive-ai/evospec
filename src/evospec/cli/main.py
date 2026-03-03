@@ -96,6 +96,28 @@ def check(strict: bool, run_fitness: bool) -> None:
             raise SystemExit(1)
 
 
+@cli.command()
+@click.option("--since", default=None, help="Git ref (commit, tag, branch) to compare from.")
+@click.option("--generate", is_flag=True, help="Create draft change specs from detected drift.")
+@click.option("--ci", is_flag=True, help="Machine-readable JSON output for CI pipelines.")
+def sync(since: str | None, generate: bool, ci: bool) -> None:
+    """Detect spec drift by analyzing git diffs against domain specs."""
+    from evospec.core.sync import run_sync
+
+    run_sync(since=since, generate=generate, ci=ci)
+
+
+@cli.command()
+@click.option("--strict", is_flag=True, help="Exit non-zero on failures (for CI gates).")
+@click.option("--format", "output_format", type=click.Choice(["text", "json", "markdown"]),
+              default="text", help="Output format.")
+def verify(strict: bool, output_format: str) -> None:
+    """Verify spec accuracy against implementation code."""
+    from evospec.core.verify import run_verify
+
+    run_verify(strict=strict, output_format=output_format)
+
+
 @cli.group()
 def reverse() -> None:
     """Reverse-engineer domain contracts from code."""

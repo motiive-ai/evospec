@@ -1,5 +1,6 @@
 """EvoSpec MCP Server — exposes EvoSpec tools to AI agents via Model Context Protocol."""
 
+import json
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -1449,6 +1450,112 @@ def get_consumer_context(intent: str) -> dict:
             "Cross-reference entity names with the domain glossary for correct terminology."
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# Sync & Verification tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("evospec://drift-report")
+def get_drift_report() -> str:
+    """Return current spec drift analysis (compares specs against recent git changes)."""
+    from evospec.core.sync import run_sync
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    import os
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        report = run_sync(ci=True)
+        return json.dumps(report.to_dict(), indent=2)
+    finally:
+        os.chdir(old_cwd)
+
+
+@mcp.resource("evospec://verification")
+def get_verification_report() -> str:
+    """Return spec verification report (accuracy of specs vs implementation)."""
+    import os
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        from evospec.core.verify import run_verify
+        report = run_verify(output_format="json")
+        return json.dumps(report.to_dict(), indent=2)
+    finally:
+        os.chdir(old_cwd)
+
+
+@mcp.tool()
+def check_drift(since: str | None = None) -> dict:
+    """Run drift detection: compare git changes against domain specs.
+
+    Analyzes git diffs to find entity field changes, new/removed API endpoints,
+    and potential invariant impacts. Returns a drift score (0-100%).
+
+    Args:
+        since: Git ref (commit, tag, branch) to compare from. If None, compares working tree against HEAD.
+    """
+    import os
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        from evospec.core.sync import run_sync
+        report = run_sync(since=since, ci=True)
+        return report.to_dict()
+    finally:
+        os.chdir(old_cwd)
+
+
+@mcp.tool()
+def verify_spec(strict: bool = False) -> dict:
+    """Verify spec accuracy against implementation code.
+
+    Checks 5 levels: entity fields, API endpoints, invariant enforcement,
+    bounded context structure, and cross-spec consistency. Returns scores
+    for each level and an overall score (0-100%).
+
+    Args:
+        strict: If True, returns failure status when scores are below configured thresholds.
+    """
+    import os
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        from evospec.core.verify import run_verify
+        report = run_verify(output_format="json", strict=False)
+        result = report.to_dict()
+        if strict:
+            from evospec.core.config import load_config
+            config = load_config(root)
+            thresholds = config.get("verification", {})
+            min_overall = thresholds.get("min_overall_score", 0)
+            if report.overall_score < min_overall:
+                result["status"] = "FAIL"
+            else:
+                result["status"] = "PASS"
+        return result
+    finally:
+        os.chdir(old_cwd)
 
 
 # ---------------------------------------------------------------------------
