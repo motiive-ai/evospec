@@ -296,14 +296,58 @@ To generate for a single platform: `evospec generate agents --platform cursor`
 
 ### MCP Server (Any Agent)
 
-EvoSpec exposes a **Model Context Protocol server** for programmatic access:
+EvoSpec exposes a **Model Context Protocol server** for programmatic access.
+
+#### Installation & Setup
 
 ```bash
-# Start the MCP server
+# Install globally via pipx
+pipx install evospec
+
+# The MCP server is now available as:
 evospec serve
-# Or directly
+# or directly:
 evospec-mcp
 ```
+
+#### Connecting to Your AI Tool
+
+Add to your MCP configuration file:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json` in your project):
+```json
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+**Windsurf** (`~/.codeium/windsurf/mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+Once connected, the agent should read `evospec://guide` for a full walkthrough of available tools and resources.
 
 **Tools** agents can call:
 
@@ -335,6 +379,7 @@ evospec-mcp
 
 | Resource | Description |
 |----------|-------------|
+| `evospec://guide` | **Start here** — comprehensive agent guide with journey, tools, concepts |
 | `evospec://bootstrap` | AI bootstrap prompt (works pre-init) |
 | `evospec://project` | Lean project metadata |
 | `evospec://glossary` | Domain glossary (ubiquitous language) |
@@ -603,24 +648,30 @@ fitness_functions:
 | Command | Description |
 |---------|-------------|
 | `evospec init` | Initialize EvoSpec in the current project. Options: `--name`, `--detect`, `--specs-dir` |
-| `evospec new <slug>` | Create a new change spec. Options: `--zone edge\|hybrid\|core` |
+| `evospec new <title>` | Create a new change spec. Options: `--zone edge\|hybrid\|core`, `--type` |
 | `evospec classify <path>` | Interactively classify a change by zone |
-| `evospec check` | Run spec validations + invariant impact checks. Options: `--run-fitness` |
+| `evospec check` | Run spec validations + invariant impact checks. Options: `--strict`, `--run-fitness` |
 | `evospec fitness` | Run all fitness functions defined in spec.yaml files |
 | `evospec sync` | Detect spec drift from git changes. Options: `--since`, `--generate`, `--ci` |
 | `evospec verify` | Verify spec accuracy against code (5 levels). Options: `--strict`, `--format` |
-| `evospec capture` | Generate retroactive specs. Options: `--from-history`, `--since`, `--min-cluster-size`, `--max-clusters` |
-| `evospec reverse api` | Reverse-engineer API routes. Options: `--framework`, `--deep` |
-| `evospec reverse db` | Reverse-engineer DB models. Options: `--framework`, `--deep` |
-| `evospec reverse deps` | Reverse-engineer dependencies. Options: `--deep` |
-| `evospec reverse cli` | Reverse-engineer CLI structure |
+| `evospec capture --from-history` | Generate retroactive specs from git history. Options: `--since`, `--min-cluster-size` |
+| `evospec reverse api` | Reverse-engineer API routes (auto-detects framework). Options: `--framework`, `--deep`, `--write` |
+| `evospec reverse db` | Reverse-engineer DB models. Options: `--deep`, `--write` |
+| `evospec reverse deps` | Reverse-engineer cross-system dependencies. Options: `--deep`, `--write` |
+| `evospec reverse cli` | Reverse-engineer CLI/module structure |
+| `evospec deprecate contract <endpoint>` | Mark an API endpoint as deprecated. Options: `--replacement`, `--sunset` |
+| `evospec deprecate entity <name>` | Mark a domain entity as deprecated. Options: `--replacement` |
+| `evospec archive` | Archive completed/abandoned specs. Options: `--id`, `--status`, `--dry-run` |
 | `evospec adr new <title>` | Create an ADR. `evospec adr list` to list all |
 | `evospec feature add <title>` | Add a feature. `evospec feature list`, `evospec feature update` |
 | `evospec learn` | Record experiment results and update discovery assumptions |
+| `evospec contract` | *(AI workflow)* Create a domain contract — use `/evospec.contract` in your IDE |
+| `evospec tasks` | *(AI workflow)* Generate implementation tasks — use `/evospec.tasks` in your IDE |
+| `evospec implement` | *(AI workflow)* Execute tasks — use `/evospec.implement` in your IDE |
 | `evospec prompt` | Emit AI bootstrap prompt. Options: `--detect`, `--format json` |
-| `evospec status` | Show status of all change specs |
-| `evospec render` | Render all specs into consolidated markdown |
-| `evospec generate agents` | Regenerate AI agent files. Options: `--platform windsurf\|claude\|cursor` |
+| `evospec status` | Show status of all change specs. Options: `--include-archived` |
+| `evospec render` | Render all specs into consolidated markdown. Options: `--include-archived` |
+| `evospec generate agents` | Regenerate AI agent files. Options: `--platform windsurf\|claude\|cursor\|skills` |
 | `evospec serve` | Start the MCP server for AI agent integration |
 
 ## Getting Started

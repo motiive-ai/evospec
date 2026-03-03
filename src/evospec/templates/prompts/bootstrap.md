@@ -45,17 +45,51 @@ After `evospec init`, read the generated **CLAUDE.md** for full framework contex
 | `evospec classify` | Interactively classify a change by zone |
 | `evospec check [--strict]` | Validate specs and run fitness checks |
 | `evospec fitness` | Execute fitness function tests |
-| `evospec reverse api --framework <fw>` | Reverse-engineer API endpoints |
+| `evospec sync [--since REF]` | Detect spec drift from git changes |
+| `evospec verify [--strict]` | Verify spec accuracy against code (5 levels) |
+| `evospec capture --from-history` | Generate retroactive specs from git history |
+| `evospec reverse api` | Reverse-engineer API endpoints (auto-detects framework) |
 | `evospec reverse db --source <dir>` | Reverse-engineer database schema |
 | `evospec reverse cli --source <dir>` | Reverse-engineer CLI/module structure |
 | `evospec reverse deps --source <dir>` | Reverse-engineer cross-system API deps |
+| `evospec deprecate contract <endpoint>` | Mark an API endpoint as deprecated |
+| `evospec deprecate entity <name>` | Mark a domain entity as deprecated |
+| `evospec archive [--dry-run]` | Archive completed/abandoned specs |
+| `evospec status [--include-archived]` | Show status of all change specs |
+| `evospec render [--include-archived]` | Render specs into consolidated markdown |
 | `evospec generate agents` | Regenerate AI agent integration files |
-| `evospec status` | Show status of all change specs |
-| `evospec render` | Render specs into consolidated markdown |
 | `evospec adr new "title"` | Create Architecture Decision Record |
 | `evospec feature add "title"` | Register a new feature |
+| `evospec learn` | Record experiment results |
+| `evospec contract` | (AI workflow) Create domain contract |
+| `evospec tasks` | (AI workflow) Generate implementation tasks |
+| `evospec implement` | (AI workflow) Execute tasks phase by phase |
 | `evospec serve` | Start MCP server for AI agent integration |
 | `evospec prompt [--detect]` | Show this bootstrap prompt |
+
+## MCP Server (for AI agent integration)
+
+```bash
+# Start the MCP server (after pipx install evospec)
+evospec serve
+# Or directly:
+evospec-mcp
+```
+
+Configure in your AI tool:
+
+```json
+// Claude Desktop / Cursor / Windsurf MCP config:
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+Once connected, the agent can read `evospec://guide` for a full consumer walkthrough.
 
 ## Workflows (after init)
 
@@ -71,6 +105,13 @@ After `evospec init`, read the generated **CLAUDE.md** for full framework contex
 | `/evospec.learn` | Record experiment results |
 | `/evospec.adr` | Create an Architecture Decision Record |
 | `/evospec.capture` | Retroactively formalize existing work into specs |
+
+## Deprecation & Lifecycle
+
+API contracts and entities support lifecycle management:
+- `status: active|deprecated|removed` with `deprecated_at`, `sunset_date`, `replacement`
+- MCP tools hide deprecated items by default and show warnings
+- `evospec archive` moves completed/abandoned specs to `specs/archive/`
 
 ## Supported Frameworks
 

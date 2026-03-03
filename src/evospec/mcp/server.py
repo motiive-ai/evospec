@@ -9,9 +9,27 @@ mcp = FastMCP(
     "EvoSpec",
     json_response=True,
     instructions=(
-        "EvoSpec is a spec-driven delivery toolkit. "
-        "It classifies changes as edge/hybrid/core and applies proportional governance. "
-        "Use these tools to manage specs, run checks, and track features."
+        "EvoSpec is a spec-driven delivery toolkit that adapts specification rigor to change risk.\n\n"
+        "## How it works\n"
+        "Every change is classified into a zone:\n"
+        "- **edge** — experiments, hypotheses, prototypes (lightweight specs, kill criteria)\n"
+        "- **hybrid** — crosses boundaries, moderate risk (discovery spec + light domain contract)\n"
+        "- **core** — domain invariants, state machines, persistence (full contracts + fitness functions)\n\n"
+        "## What you can do\n"
+        "1. **Explore the domain**: get_entities(), get_invariants(), get_api_contract()\n"
+        "2. **Check safety**: check_invariant_impact() — before any change, check which rules would break\n"
+        "3. **Understand context**: get_consumer_context(intent) — combined entities + API + invariants for a task\n"
+        "4. **Read specs**: list_specs(), read_spec() — see what's being worked on\n"
+        "5. **Verify accuracy**: check_drift(), verify_spec() — is the spec still correct?\n\n"
+        "## Key resources\n"
+        "- evospec://guide — **start here** — full guide for new consumers\n"
+        "- evospec://glossary — domain terms (ubiquitous language)\n"
+        "- evospec://skills — project-specific coding rules\n"
+        "- evospec://api-catalog — browsable endpoint catalog\n\n"
+        "## Deprecation\n"
+        "API contracts and entities can be deprecated. Tools hide deprecated items by default\n"
+        "and surface deprecation_warnings with replacement guidance. Set include_deprecated=True to see all.\n\n"
+        "Install: `pipx install evospec` · Start server: `evospec serve` or `evospec-mcp`"
     ),
 )
 
@@ -100,6 +118,99 @@ def get_context_map() -> str:
     if ctx_map.exists():
         return ctx_map.read_text()
     return "No context map found."
+
+
+@mcp.resource("evospec://guide")
+def get_guide() -> str:
+    """Comprehensive guide for AI agents using EvoSpec. Start here.
+
+    Explains the framework, available tools, resources, and recommended
+    workflow for exploring a project's domain, API, and invariants.
+    """
+    return """# EvoSpec — Agent Guide
+
+## What is EvoSpec?
+
+EvoSpec is a spec-driven delivery toolkit installed via `pipx install evospec`.
+It classifies every change by risk zone (edge/hybrid/core) and applies proportional governance.
+
+## Your journey as a consumer
+
+### Step 1: Orient yourself
+- Read `evospec://project` — project name, description
+- Read `evospec://glossary` — domain terms (ubiquitous language)
+- Read `evospec://skills` — coding rules you MUST follow
+
+### Step 2: Explore the domain
+- Call `get_entities()` — understand the domain model (entities, fields, relationships)
+- Call `get_entities(context="orders")` — filter by bounded context
+- Call `get_invariants()` — rules that MUST always hold (the safety net)
+
+### Step 3: Discover the API
+- Call `get_api_contract(tag="orders")` — active endpoints, params, responses
+- Read `evospec://api-catalog` — browsable endpoint catalog by tag
+- Call `get_file_schema(name="OrderExport")` — file/response schemas
+
+### Step 4: Get combined context for a task
+- Call `get_consumer_context("build a dashboard showing orders by category")`
+  → Returns entities + API + invariants + glossary relevant to your intent in one call
+
+### Step 5: Check safety before building
+- Call `check_invariant_impact(entities=["Order"], description="...")`
+  → Shows which invariants your change might break and how to resolve conflicts
+
+### Step 6: Parse real data
+- Call `parse_contract_file("response.json")` — extract entity structure from a real API response
+
+## Deprecation awareness
+
+API contracts and entities may be deprecated. By default:
+- Tools HIDE deprecated items (you won't accidentally use them)
+- Tools SHOW deprecation_warnings with replacement guidance
+- Set `include_deprecated=True` on any tool to see deprecated items
+
+## Key concepts
+
+| Concept | Meaning |
+|---------|---------|
+| **edge zone** | Experiments, prototypes — lightweight specs |
+| **hybrid zone** | Crosses boundaries — moderate governance |
+| **core zone** | Domain contracts — invariants + fitness functions |
+| **invariant** | A rule that must ALWAYS hold (e.g., "Order must have ≥1 item") |
+| **fitness function** | Automated test that enforces an invariant |
+| **bounded context** | A logical boundary around a group of entities |
+| **upstream** | Another service whose entities/invariants this project depends on |
+
+## All available tools
+
+| Tool | Use when |
+|------|----------|
+| `get_entities()` | You need to understand the domain model |
+| `get_invariants()` | You need to know what rules exist |
+| `get_api_contract()` | You need API endpoint details |
+| `get_file_schema()` | You need response/file format details |
+| `get_consumer_context(intent)` | You want everything relevant to a task in one call |
+| `get_upstream_apis()` | You need to know what external services are consumed |
+| `parse_contract_file(path)` | You have a real API response to analyze |
+| `check_invariant_impact(...)` | You're about to make a change and need safety check |
+| `list_specs()` | You want to see what changes are in progress |
+| `read_spec(path)` | You want full details of a specific change |
+| `check_drift()` | You want to know if specs match the code |
+| `verify_spec()` | You want detailed spec accuracy analysis |
+| `list_features()` | You want to see the feature lifecycle registry |
+
+## All available resources
+
+| Resource | Content |
+|----------|---------|
+| `evospec://guide` | This guide (you're reading it) |
+| `evospec://project` | Project name and description |
+| `evospec://glossary` | Domain terms and definitions |
+| `evospec://context-map` | How bounded contexts relate |
+| `evospec://skills` | Project-specific coding rules |
+| `evospec://api-catalog` | Browsable API endpoint catalog |
+| `evospec://bootstrap` | Full bootstrap prompt (for pre-init discovery) |
+"""
 
 
 @mcp.resource("evospec://skills")
