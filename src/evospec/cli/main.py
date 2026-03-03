@@ -136,6 +136,22 @@ def capture(from_history: bool, since: str | None, min_cluster_size: int, max_cl
         )
 
 
+@cli.command()
+@click.option("--id", "spec_id", default=None, help="Archive a specific spec by id.")
+@click.option("--status", "status_filter", default=None,
+              help="Archive all specs with this status (e.g., completed, abandoned).")
+@click.option("--dry-run", is_flag=True, help="Show what would be archived without moving.")
+def archive(spec_id: str | None, status_filter: str | None, dry_run: bool) -> None:
+    """Archive completed/abandoned specs to specs/archive/.
+
+    By default archives all completed, abandoned, and superseded specs.
+    Archived specs are hidden from MCP tools but remain accessible.
+    """
+    from evospec.core.archive import run_archive
+
+    run_archive(spec_id=spec_id, status_filter=status_filter, dry_run=dry_run)
+
+
 @cli.group()
 def reverse() -> None:
     """Reverse-engineer domain contracts from code."""

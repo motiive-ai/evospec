@@ -104,11 +104,31 @@ MCP tool: evospec:check_invariant_impact(
 → Your dashboard should account for this restriction when displaying category combinations
 ```
 
+### 6. Deprecation Awareness
+
+```
+# "Show me the orders API"
+MCP tool: evospec:get_api_contract(tag="orders")
+→ 5 active endpoints returned
+→ deprecation_warnings: ["GET /api/orders/all is deprecated — use GET /api/orders instead (sunset: 2026-06-01)"]
+→ note: "1 deprecated/removed contract(s) hidden. Set include_deprecated=True to see them."
+
+# "Show me everything, including deprecated"
+MCP tool: evospec:get_api_contract(tag="orders", include_deprecated=True)
+→ 6 endpoints (5 active + 1 deprecated with [DEPRECATED] annotation)
+```
+
+AI agents **never accidentally use deprecated endpoints** because they're hidden by default. The deprecation warning tells the agent exactly what to use instead.
+
 ---
 
 ## How Skills Help
 
-**Agent Skills** (`evospec-discover`) guide the AI agent through a structured discovery workflow:
+EvoSpec has **two kinds of skills**:
+
+### Agent Skills (workflow guidance)
+
+**Agent Skills** (`.agents/skills/evospec-discover/SKILL.md`) guide the AI agent through a structured discovery workflow:
 
 1. **Read the glossary** — understand the ubiquitous language first
 2. **Explore entities** — understand the domain model
@@ -117,7 +137,26 @@ MCP tool: evospec:check_invariant_impact(
 5. **Parse response files** — understand the data shape
 6. **Check impact** — verify the proposed system won't violate any rules
 
-Without Skills, the AI agent would need to know which MCP tools to call and in what order. Skills encode this workflow so the agent follows a structured path from "I know nothing" to "I can build a correct integration."
+Without Agent Skills, the AI agent would need to know which MCP tools to call and in what order. Skills encode this workflow so the agent follows a structured path from "I know nothing" to "I can build a correct integration."
+
+### Implementation Skills (coding rules)
+
+**Implementation Skills** (`specs/domain/skills.yaml`) are project-specific rules injected into AI agent context. They encode knowledge that isn't captured in invariants or API contracts — practical advice for correct integration:
+
+```yaml
+# From this project's skills.yaml:
+- category: "api-integration"
+  rules:
+    - "Always validate category restrictions client-side before POST"
+    - "Never assume order status transitions — check the state machine"
+
+- category: "deprecation"
+  rules:
+    - "Do NOT use GET /api/orders/all — deprecated, sunset 2026-06-01"
+    - "Use GET /api/orders with pagination params instead"
+```
+
+Skills are loaded via `evospec://skills` MCP resource and injected into generated agent files (CLAUDE.md, Windsurf workflows, Cursor rules).
 
 ---
 

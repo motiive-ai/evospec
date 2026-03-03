@@ -159,3 +159,21 @@ contracts:
             type: "List<Category>"
     auth: "bearer token"
     tags: ["categories", "read"]
+
+  # --- Deprecation example ---
+  # This endpoint was replaced by the paginated version above.
+  # AI agents calling get_api_contract() will NOT see this by default.
+  # They will see a deprecation warning pointing to the replacement.
+  - endpoint: "GET /api/orders/all"
+    description: "List all orders (no pagination) — DEPRECATED"
+    status: "deprecated"
+    deprecated_at: "2026-02-15"
+    sunset_date: "2026-06-01"
+    replacement: "GET /api/orders"
+    response:
+      200:
+        fields:
+          - name: "orders"
+            type: "List<Order>"
+    auth: "bearer token"
+    tags: ["orders", "read"]

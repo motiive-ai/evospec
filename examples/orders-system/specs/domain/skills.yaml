@@ -1,0 +1,28 @@
+# Implementation Skills — Orders System
+# Project-specific coding rules that AI agents should follow.
+
+skills:
+  - category: "api-integration"
+    rules:
+      - "Always validate category restrictions client-side before POST /api/orders or POST /api/orders/{id}/items"
+      - "Use the 409 CATEGORY_RESTRICTION_VIOLATED error code to detect restriction violations"
+      - "Never assume order status transitions — check the state machine (draft → confirmed → shipped → delivered)"
+      - "Always include bearer token in Authorization header"
+
+  - category: "data-handling"
+    rules:
+      - "Parse monetary values (total_amount, unit_price) as Decimal, never float"
+      - "All IDs are UUIDs — validate format before API calls"
+      - "Timestamps are ISO 8601 — use proper date parsing libraries"
+
+  - category: "domain-rules"
+    rules:
+      - "An Order MUST have at least one Item before it can be confirmed"
+      - "Items from categories in the same restriction_group CANNOT coexist in a single Order"
+      - "Check GET /api/categories to discover which categories conflict"
+
+  - category: "deprecation"
+    rules:
+      - "Do NOT use GET /api/orders/all — it is deprecated and will be removed on 2026-06-01"
+      - "Use GET /api/orders with pagination params instead"
+      - "Always check api-contracts.yaml status field before using an endpoint"

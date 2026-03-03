@@ -525,6 +525,8 @@ _MCP_TOOLS = {
     "get_discovery_status", "record_experiment", "update_assumption",
     "run_fitness_functions", "get_entities", "get_invariants",
     "get_upstream_apis", "parse_contract_file",
+    "get_api_contract", "get_file_schema", "get_consumer_context",
+    "check_drift", "verify_spec",
 }
 
 

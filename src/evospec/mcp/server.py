@@ -198,39 +198,78 @@ def get_all_invariants() -> str:
 
 
 @mcp.tool()
-def list_specs() -> dict:
-    """List all change specs with their zone, status, and available artifacts."""
+def list_specs(
+    status: str | None = None,
+    include_archived: bool = False,
+) -> dict:
+    """List all change specs with their zone, status, and available artifacts.
+
+    By default, archived specs (in specs/archive/) are excluded.
+    Completed and abandoned specs in specs/changes/ are always shown
+    unless filtered by status.
+
+    Args:
+        status: Filter by status (e.g., 'draft', 'in-progress', 'completed')
+        include_archived: Include specs from specs/archive/ (default: False)
+    """
     import yaml
 
     root = _find_root()
     if root is None:
         return {"error": "No evospec.yaml found. Run `evospec init` first."}
 
-    specs_dir = root / "specs" / "changes"
-    if not specs_dir.exists():
-        return {"specs": [], "count": 0}
+    specs_dirs = [root / "specs" / "changes"]
+    if include_archived:
+        archive_dir = root / "specs" / "archive"
+        if archive_dir.exists():
+            specs_dirs.append(archive_dir)
 
     results = []
-    for spec_dir in sorted(specs_dir.iterdir()):
-        spec_yaml = spec_dir / "spec.yaml"
-        if not spec_yaml.exists():
+    archived_count = 0
+    for specs_dir in specs_dirs:
+        if not specs_dir.exists():
             continue
-        spec = yaml.safe_load(spec_yaml.read_text()) or {}
-        artifacts = []
-        for artifact in ["discovery-spec.md", "domain-contract.md", "tasks.md"]:
-            if (spec_dir / artifact).exists():
-                artifacts.append(artifact)
-        results.append({
-            "id": spec.get("id", spec_dir.name),
-            "title": spec.get("title", spec_dir.name),
-            "zone": spec.get("zone", "unknown"),
-            "status": spec.get("status", "draft"),
-            "risk": spec.get("classification", {}).get("risk", "unknown"),
-            "artifacts": artifacts,
-            "path": str(spec_dir.relative_to(root)),
-        })
+        is_archive = specs_dir.name == "archive"
+        for spec_dir in sorted(specs_dir.iterdir()):
+            spec_yaml = spec_dir / "spec.yaml"
+            if not spec_yaml.exists():
+                continue
+            spec = yaml.safe_load(spec_yaml.read_text()) or {}
+            spec_status = spec.get("status", "draft")
 
-    return {"specs": results, "count": len(results)}
+            if is_archive:
+                archived_count += 1
+
+            # Filter by status if requested
+            if status and spec_status.lower() != status.lower():
+                continue
+
+            artifacts = []
+            for artifact in ["discovery-spec.md", "domain-contract.md", "tasks.md"]:
+                if (spec_dir / artifact).exists():
+                    artifacts.append(artifact)
+            entry = {
+                "id": spec.get("id", spec_dir.name),
+                "title": spec.get("title", spec_dir.name),
+                "zone": spec.get("zone", "unknown"),
+                "status": spec_status,
+                "risk": spec.get("classification", {}).get("risk", "unknown"),
+                "artifacts": artifacts,
+                "path": str(spec_dir.relative_to(root)),
+            }
+            if is_archive:
+                entry["archived"] = True
+            results.append(entry)
+
+    result = {"specs": results, "count": len(results)}
+    if not include_archived and archived_count == 0:
+        # Check if archive dir exists and has specs
+        archive_dir = root / "specs" / "archive"
+        if archive_dir.exists():
+            archive_count = sum(1 for d in archive_dir.iterdir() if (d / "spec.yaml").exists())
+            if archive_count > 0:
+                result["note"] = f"{archive_count} archived spec(s) hidden. Set include_archived=True to see them."
+    return result
 
 
 @mcp.tool()
@@ -1216,20 +1255,29 @@ def parse_contract_file(file_path: str) -> dict:
 def get_entities(
     context: str | None = None,
     upstream: str | None = None,
+    include_deprecated: bool = False,
 ) -> dict:
     """Get domain entities, optionally filtered by bounded context or upstream.
 
     Returns the entity registry as structured data. Use this instead of the
     deprecated evospec://entities resource.
 
+    Entities support lifecycle fields:
+      status: active | deprecated | removed (default: active)
+      deprecated_at: ISO date when deprecated
+      replacement: name of the replacement entity
+
+    By default, deprecated/removed entities are excluded.
+
     Args:
         context: Filter by bounded context name (case-insensitive)
         upstream: Filter by upstream service name (e.g., 'order-service')
+        include_deprecated: Include deprecated/removed entities (default: False)
     """
-    text = _build_entity_registry(context=context, upstream=upstream)
+    text = _build_entity_registry(context=context, upstream=upstream, include_deprecated=include_deprecated)
     return {
         "text": text,
-        "filters": {"context": context, "upstream": upstream},
+        "filters": {"context": context, "upstream": upstream, "include_deprecated": include_deprecated},
     }
 
 
@@ -1259,6 +1307,7 @@ def get_invariants(context: str | None = None) -> dict:
 def get_api_contract(
     endpoint: str | None = None,
     tag: str | None = None,
+    include_deprecated: bool = False,
 ) -> dict:
     """Get API contracts from specs/domain/api-contracts.yaml.
 
@@ -1266,9 +1315,19 @@ def get_api_contract(
     schemas, auth, and tags. Use this when building integrations against
     a team's API.
 
+    By default, deprecated contracts are excluded. Set include_deprecated=True
+    to see them (they will be annotated with deprecation warnings).
+
+    Contracts support lifecycle fields:
+      status: active | deprecated | removed (default: active)
+      deprecated_at: ISO date when deprecated
+      sunset_date: ISO date when the endpoint will be removed
+      replacement: endpoint path of the replacement
+
     Args:
         endpoint: Filter by endpoint path (substring match, case-insensitive)
         tag: Filter by tag (e.g., 'orders', 'read')
+        include_deprecated: Include deprecated/removed contracts (default: False)
     """
     from evospec.core.config import load_config
 
@@ -1294,12 +1353,39 @@ def get_api_contract(
         tag_lower = tag.lower()
         results = [c for c in results if tag_lower in [t.lower() for t in c.get("tags", [])]]
 
-    return {
-        "contracts": results,
-        "count": len(results),
+    # Deprecation handling
+    deprecated_count = 0
+    warnings = []
+    filtered = []
+    for c in results:
+        status = (c.get("status") or "active").lower()
+        if status in ("deprecated", "removed"):
+            deprecated_count += 1
+            replacement = c.get("replacement", "")
+            sunset = c.get("sunset_date", "")
+            ep = c.get("endpoint", "?")
+            warn = f"{ep} is {status}"
+            if replacement:
+                warn += f" — use {replacement} instead"
+            if sunset:
+                warn += f" (sunset: {sunset})"
+            warnings.append(warn)
+            if not include_deprecated:
+                continue
+        filtered.append(c)
+
+    result = {
+        "contracts": filtered,
+        "count": len(filtered),
         "total": len(contracts),
-        "filters": {"endpoint": endpoint, "tag": tag},
+        "filters": {"endpoint": endpoint, "tag": tag, "include_deprecated": include_deprecated},
     }
+    if deprecated_count > 0:
+        result["deprecated_count"] = deprecated_count
+        result["deprecation_warnings"] = warnings
+        if not include_deprecated:
+            result["note"] = f"{deprecated_count} deprecated/removed contract(s) hidden. Set include_deprecated=True to see them."
+    return result
 
 
 @mcp.tool()
@@ -1369,11 +1455,21 @@ def get_consumer_context(intent: str) -> dict:
     intent_lower = intent.lower()
     intent_words = set(intent_lower.split())
 
-    # Search API contracts by keyword overlap
+    # Search API contracts by keyword overlap (exclude deprecated)
     contracts_data = config.get("api_contracts", {})
     all_contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
     matching_contracts = []
+    deprecation_warnings = []
     for c in all_contracts:
+        contract_status = (c.get("status") or "active").lower()
+        if contract_status in ("deprecated", "removed"):
+            ep = c.get("endpoint", "?")
+            replacement = c.get("replacement", "")
+            warn = f"{ep} is {contract_status}"
+            if replacement:
+                warn += f" — use {replacement} instead"
+            deprecation_warnings.append(warn)
+            continue
         score = 0
         ep = (c.get("endpoint") or "").lower()
         desc = (c.get("description") or "").lower()
@@ -1410,10 +1506,18 @@ def get_consumer_context(intent: str) -> dict:
             matching_schemas.append({"schema": s, "relevance": score})
     matching_schemas.sort(key=lambda x: x["relevance"], reverse=True)
 
-    # Find relevant entities
+    # Find relevant entities (exclude deprecated)
     entities = config.get("domain", {}).get("entities", [])
     matching_entities = []
     for e in entities:
+        ent_status = (e.get("status") or "active").lower()
+        if ent_status in ("deprecated", "removed"):
+            replacement = e.get("replacement", "")
+            warn = f"Entity '{e.get('name', '?')}' is {ent_status}"
+            if replacement:
+                warn += f" — use {replacement} instead"
+            deprecation_warnings.append(warn)
+            continue
         name = (e.get("name") or "").lower()
         ctx = (e.get("context") or "").lower()
         desc = (e.get("description") or "").lower()
@@ -1438,7 +1542,7 @@ def get_consumer_context(intent: str) -> dict:
         if relevant_lines:
             glossary_excerpt = "\n".join(relevant_lines[:10])
 
-    return {
+    result = {
         "intent": intent,
         "api_contracts": [m["contract"] for m in matching_contracts[:5]],
         "file_schemas": [m["schema"] for m in matching_schemas[:5]],
@@ -1450,6 +1554,9 @@ def get_consumer_context(intent: str) -> dict:
             "Cross-reference entity names with the domain glossary for correct terminology."
         ),
     }
+    if deprecation_warnings:
+        result["deprecation_warnings"] = deprecation_warnings
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1573,6 +1680,7 @@ def verify_spec(strict: bool = False) -> dict:
 def _build_entity_registry(
     context: str | None = None,
     upstream: str | None = None,
+    include_deprecated: bool = False,
 ) -> str:
     """Build entity registry text, optionally filtered by context or upstream."""
     from evospec.core.config import load_config
@@ -1609,11 +1717,26 @@ def _build_entity_registry(
                     continue
                 entities.append(ent_copy)
 
+    # Filter deprecated entities
+    deprecated_names: list[str] = []
+    if not include_deprecated:
+        active = []
+        for ent in entities:
+            status = (ent.get("status") or "active").lower()
+            if status in ("deprecated", "removed"):
+                deprecated_names.append(ent.get("name", "?"))
+                continue
+            active.append(ent)
+        entities = active
+
     if not entities:
         return "No entities found matching the filter."
 
     lines = ["# Domain Entity Registry", ""]
     lines.append(f"Total: {len(entities)} entities.\n")
+    if deprecated_names:
+        lines.append(f"*{len(deprecated_names)} deprecated/removed entity(ies) hidden: {', '.join(deprecated_names)}*")
+        lines.append("")
 
     by_context: dict[str, list[dict]] = {}
     for ent in entities:
@@ -1628,7 +1751,17 @@ def _build_entity_registry(
             table = ent.get("table", "")
             agg = " (aggregate root)" if ent.get("aggregate_root") else ""
             upstream_tag = f" [upstream: {ent['_upstream']}]" if "_upstream" in ent else ""
-            lines.append(f"### {name}{agg}{upstream_tag}")
+            ent_status = (ent.get("status") or "active").lower()
+            dep_tag = ""
+            if ent_status == "deprecated":
+                dep_tag = " [DEPRECATED"
+                replacement = ent.get("replacement", "")
+                if replacement:
+                    dep_tag += f" — use {replacement}"
+                dep_tag += "]"
+            elif ent_status == "removed":
+                dep_tag = " [REMOVED]"
+            lines.append(f"### {name}{agg}{upstream_tag}{dep_tag}")
             if table:
                 lines.append(f"Table: `{table}`")
 
