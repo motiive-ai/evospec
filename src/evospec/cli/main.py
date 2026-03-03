@@ -118,6 +118,24 @@ def verify(strict: bool, output_format: str) -> None:
     run_verify(strict=strict, output_format=output_format)
 
 
+@cli.command()
+@click.option("--from-history", "from_history", is_flag=True, required=True,
+              help="Analyze git history to detect feature clusters and generate retroactive specs.")
+@click.option("--since", default=None, help="Git ref (commit, tag, branch) to start analysis from.")
+@click.option("--min-cluster-size", default=2, type=int, help="Minimum files per cluster (default: 2).")
+@click.option("--max-clusters", default=20, type=int, help="Maximum clusters to generate (default: 20).")
+def capture(from_history: bool, since: str | None, min_cluster_size: int, max_clusters: int) -> None:
+    """Generate retroactive specs from existing codebase."""
+    if from_history:
+        from evospec.core.capture import run_capture_from_history
+
+        run_capture_from_history(
+            since=since,
+            min_cluster_size=min_cluster_size,
+            max_clusters=max_clusters,
+        )
+
+
 @cli.group()
 def reverse() -> None:
     """Reverse-engineer domain contracts from code."""
