@@ -5,7 +5,7 @@ id: "deep-reverse-engineering"
 title: "Deep Reverse Engineering (schema extraction, invariant detection, state machines)"
 zone: "core"  # edge | hybrid | core
 change_type: "improvement"  # experiment | improvement | bugfix
-status: "draft"     # draft | proposed | accepted | in-progress | completed | abandoned | superseded
+status: "completed"     # draft | proposed | accepted | in-progress | completed | abandoned | superseded
 created_at: "2026-03-02"
 updated_at: "2026-03-02"
 

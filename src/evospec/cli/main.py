@@ -112,20 +112,24 @@ def reverse() -> None:
     ]),
 )
 @click.option("--source", default=None, help="Source directory to scan.")
-def reverse_api(framework: str | None, source: str | None) -> None:
+@click.option("--deep", is_flag=True, help="Deep extraction: DTO fields, validation, auth, error responses.")
+@click.option("--write", is_flag=True, help="Write deep output to specs/domain/api-contracts.yaml (requires --deep).")
+def reverse_api(framework: str | None, source: str | None, deep: bool, write: bool) -> None:
     """Reverse-engineer API endpoints into spec stubs."""
     from evospec.reverse.api import reverse_engineer_api
 
-    reverse_engineer_api(framework=framework, source=source)
+    reverse_engineer_api(framework=framework, source=source, deep=deep, write=write)
 
 
 @reverse.command("db")
 @click.option("--source", default=None, help="Migrations or models directory.")
-def reverse_db(source: str | None) -> None:
+@click.option("--deep", is_flag=True, help="Deep extraction: invariant detection, state machine detection.")
+@click.option("--write", is_flag=True, help="Write deep output to specs/domain/ files (requires --deep).")
+def reverse_db(source: str | None, deep: bool, write: bool) -> None:
     """Reverse-engineer database schema into domain contract stubs."""
     from evospec.reverse.db import reverse_engineer_db
 
-    reverse_engineer_db(source=source)
+    reverse_engineer_db(source=source, deep=deep, write=write)
 
 
 @reverse.command("cli")
@@ -139,7 +143,9 @@ def reverse_cli(source: str | None) -> None:
 
 @reverse.command("deps")
 @click.option("--source", default=None, help="Source directory to scan for API calls.")
-def reverse_deps(source: str | None) -> None:
+@click.option("--deep", is_flag=True, help="Deep extraction: payload schemas, message queues, storage ops.")
+@click.option("--write", is_flag=True, help="Write deep output to specs/domain/ files (requires --deep).")
+def reverse_deps(source: str | None, deep: bool, write: bool) -> None:
     """Reverse-engineer cross-system API dependencies from source code.
 
     Scans source files for HTTP calls (fetch, axios, requests, etc.) and maps
@@ -147,7 +153,7 @@ def reverse_deps(source: str | None) -> None:
     """
     from evospec.reverse.deps import reverse_engineer_deps
 
-    reverse_engineer_deps(source=source)
+    reverse_engineer_deps(source=source, deep=deep, write=write)
 
 
 @cli.command()
