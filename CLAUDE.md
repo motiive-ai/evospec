@@ -1254,12 +1254,17 @@ Start with: `evospec serve`
 - `get_invariants(context?) — filtered invariants (by bounded context)`
 - `get_upstream_apis(upstream_name?) — list API endpoints from upstream services`
 - `parse_contract_file(file_path) — extract entities from OpenAPI/JSON Schema/JSON example files`
+- `get_api_contract(endpoint?, tag?) — structured API contracts with params, request/response schemas`
+- `get_file_schema(name?, format?) — file/response schemas with structure and examples`
+- `get_consumer_context(intent) — combined context (contracts + schemas + entities + glossary) for an intent`
 
 **Resources** (context):
 - `evospec://bootstrap — AI bootstrap prompt with project detection (works pre-init)`
 - `evospec://project — lean project metadata (name, description, paths)`
 - `evospec://glossary — ubiquitous language`
 - `evospec://context-map — bounded context relationships`
+- `evospec://skills — project-specific implementation skills (coding rules for AI agents)`
+- `evospec://api-catalog — browsable API endpoint catalog grouped by tag (for external consumers)`
 - `evospec://config — DEPRECATED alias for evospec://project (will be removed)`
 - `evospec://entities — DEPRECATED alias for get_entities() tool (will be removed)`
 - `evospec://invariants — DEPRECATED alias for get_invariants() tool (will be removed)`
