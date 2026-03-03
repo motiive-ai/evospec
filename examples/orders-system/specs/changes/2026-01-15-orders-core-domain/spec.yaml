@@ -1,0 +1,72 @@
+id: "orders-core-domain"
+title: "Orders Core Domain"
+zone: "core"
+change_type: "improvement"
+status: "completed"
+created_at: "2026-01-15"
+updated_at: "2026-01-15"
+
+bounded_context: "orders"
+
+classification:
+  touches_persistence: true
+  touches_auth: false
+  touches_billing: false
+  touches_audit: false
+  touches_multi_tenancy: false
+  hypothesis_driven: false
+  reversibility: "difficult"
+  core_signals: 1
+  risk: "high"
+
+owner: "orders-team"
+
+fitness_functions:
+  - id: "FF-ORD-001"
+    dimension: "data-integrity"
+    type: "unit-test"
+    path: "tests/test_category_restriction.py"
+    description: "Verify chemical + food items cannot coexist in same order"
+
+invariants:
+  - id: "ORD-INV-001"
+    statement: "Every Order MUST have at least one Item before status can change from draft"
+    enforcement: "api-validation"
+    fitness_function: ""
+    scope: "entity"
+
+  - id: "ORD-INV-002"
+    statement: "An Order MUST NOT contain Items from categories 'chemical' and 'food' in the same order (hazmat-food restriction group)"
+    enforcement: "domain-logic"
+    fitness_function: ""
+    scope: "entity"
+
+  - id: "ORD-INV-003"
+    statement: "Order total_amount MUST equal the sum of (quantity × unit_price) for all Items"
+    enforcement: "domain-logic"
+    fitness_function: ""
+    scope: "entity"
+
+traceability:
+  modules:
+    - "src/orders/models.py"
+    - "src/orders/api.py"
+    - "src/orders/validators.py"
+  tables:
+    - "orders"
+    - "order_items"
+    - "categories"
+  endpoints:
+    - "GET /api/orders/{orderId}"
+    - "GET /api/orders"
+    - "POST /api/orders"
+    - "POST /api/orders/{orderId}/items"
+    - "POST /api/orders/{orderId}/confirm"
+    - "GET /api/orders/{orderId}/export"
+    - "GET /api/categories"
+
+discovery:
+  outcome: "Formalized order domain with category restriction invariant"
+  opportunity: "Prevent hazardous material and food items from shipping together"
+  kill_criteria: ""
+  assumptions: []

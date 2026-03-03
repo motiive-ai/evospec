@@ -1,5 +1,6 @@
 """EvoSpec MCP Server — exposes EvoSpec tools to AI agents via Model Context Protocol."""
 
+import json
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -8,9 +9,27 @@ mcp = FastMCP(
     "EvoSpec",
     json_response=True,
     instructions=(
-        "EvoSpec is a spec-driven delivery toolkit. "
-        "It classifies changes as edge/hybrid/core and applies proportional governance. "
-        "Use these tools to manage specs, run checks, and track features."
+        "EvoSpec is a spec-driven delivery toolkit that adapts specification rigor to change risk.\n\n"
+        "## How it works\n"
+        "Every change is classified into a zone:\n"
+        "- **edge** — experiments, hypotheses, prototypes (lightweight specs, kill criteria)\n"
+        "- **hybrid** — crosses boundaries, moderate risk (discovery spec + light domain contract)\n"
+        "- **core** — domain invariants, state machines, persistence (full contracts + fitness functions)\n\n"
+        "## What you can do\n"
+        "1. **Explore the domain**: get_entities(), get_invariants(), get_api_contract()\n"
+        "2. **Check safety**: check_invariant_impact() — before any change, check which rules would break\n"
+        "3. **Understand context**: get_consumer_context(intent) — combined entities + API + invariants for a task\n"
+        "4. **Read specs**: list_specs(), read_spec() — see what's being worked on\n"
+        "5. **Verify accuracy**: check_drift(), verify_spec() — is the spec still correct?\n\n"
+        "## Key resources\n"
+        "- evospec://guide — **start here** — full guide for new consumers\n"
+        "- evospec://glossary — domain terms (ubiquitous language)\n"
+        "- evospec://skills — project-specific coding rules\n"
+        "- evospec://api-catalog — browsable endpoint catalog\n\n"
+        "## Deprecation\n"
+        "API contracts and entities can be deprecated. Tools hide deprecated items by default\n"
+        "and surface deprecation_warnings with replacement guidance. Set include_deprecated=True to see all.\n\n"
+        "Install: `pipx install evospec` · Start server: `evospec serve` or `evospec-mcp`"
     ),
 )
 
@@ -101,6 +120,167 @@ def get_context_map() -> str:
     return "No context map found."
 
 
+@mcp.resource("evospec://guide")
+def get_guide() -> str:
+    """Comprehensive guide for AI agents using EvoSpec. Start here.
+
+    Explains the framework, available tools, resources, and recommended
+    workflow for exploring a project's domain, API, and invariants.
+    """
+    return """# EvoSpec — Agent Guide
+
+## What is EvoSpec?
+
+EvoSpec is a spec-driven delivery toolkit installed via `pipx install evospec`.
+It classifies every change by risk zone (edge/hybrid/core) and applies proportional governance.
+
+## Your journey as a consumer
+
+### Step 1: Orient yourself
+- Read `evospec://project` — project name, description
+- Read `evospec://glossary` — domain terms (ubiquitous language)
+- Read `evospec://skills` — coding rules you MUST follow
+
+### Step 2: Explore the domain
+- Call `get_entities()` — understand the domain model (entities, fields, relationships)
+- Call `get_entities(context="orders")` — filter by bounded context
+- Call `get_invariants()` — rules that MUST always hold (the safety net)
+
+### Step 3: Discover the API
+- Call `get_api_contract(tag="orders")` — active endpoints, params, responses
+- Read `evospec://api-catalog` — browsable endpoint catalog by tag
+- Call `get_file_schema(name="OrderExport")` — file/response schemas
+
+### Step 4: Get combined context for a task
+- Call `get_consumer_context("build a dashboard showing orders by category")`
+  → Returns entities + API + invariants + glossary relevant to your intent in one call
+
+### Step 5: Check safety before building
+- Call `check_invariant_impact(entities=["Order"], description="...")`
+  → Shows which invariants your change might break and how to resolve conflicts
+
+### Step 6: Parse real data
+- Call `parse_contract_file("response.json")` — extract entity structure from a real API response
+
+## Deprecation awareness
+
+API contracts and entities may be deprecated. By default:
+- Tools HIDE deprecated items (you won't accidentally use them)
+- Tools SHOW deprecation_warnings with replacement guidance
+- Set `include_deprecated=True` on any tool to see deprecated items
+
+## Key concepts
+
+| Concept | Meaning |
+|---------|---------|
+| **edge zone** | Experiments, prototypes — lightweight specs |
+| **hybrid zone** | Crosses boundaries — moderate governance |
+| **core zone** | Domain contracts — invariants + fitness functions |
+| **invariant** | A rule that must ALWAYS hold (e.g., "Order must have ≥1 item") |
+| **fitness function** | Automated test that enforces an invariant |
+| **bounded context** | A logical boundary around a group of entities |
+| **upstream** | Another service whose entities/invariants this project depends on |
+
+## All available tools
+
+| Tool | Use when |
+|------|----------|
+| `get_entities()` | You need to understand the domain model |
+| `get_invariants()` | You need to know what rules exist |
+| `get_api_contract()` | You need API endpoint details |
+| `get_file_schema()` | You need response/file format details |
+| `get_consumer_context(intent)` | You want everything relevant to a task in one call |
+| `get_upstream_apis()` | You need to know what external services are consumed |
+| `parse_contract_file(path)` | You have a real API response to analyze |
+| `check_invariant_impact(...)` | You're about to make a change and need safety check |
+| `list_specs()` | You want to see what changes are in progress |
+| `read_spec(path)` | You want full details of a specific change |
+| `check_drift()` | You want to know if specs match the code |
+| `verify_spec()` | You want detailed spec accuracy analysis |
+| `list_features()` | You want to see the feature lifecycle registry |
+
+## All available resources
+
+| Resource | Content |
+|----------|---------|
+| `evospec://guide` | This guide (you're reading it) |
+| `evospec://project` | Project name and description |
+| `evospec://glossary` | Domain terms and definitions |
+| `evospec://context-map` | How bounded contexts relate |
+| `evospec://skills` | Project-specific coding rules |
+| `evospec://api-catalog` | Browsable API endpoint catalog |
+| `evospec://bootstrap` | Full bootstrap prompt (for pre-init discovery) |
+"""
+
+
+@mcp.resource("evospec://skills")
+def get_skills() -> str:
+    """Return project-specific implementation skills that AI agents should follow.
+
+    Skills are project-specific coding rules organized by category
+    (error-handling, testing, architecture, naming, dependencies, security).
+    Defined in specs/domain/skills.yaml.
+    """
+    from evospec.core.config import load_skills
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    skills = load_skills(project_root=root)
+    if not skills:
+        return "No implementation skills defined. Add skills to specs/domain/skills.yaml."
+
+    import yaml
+    return yaml.dump({"skills": skills}, default_flow_style=False, sort_keys=False)
+
+
+@mcp.resource("evospec://api-catalog")
+def get_api_catalog() -> str:
+    """Return a browsable API endpoint catalog grouped by tag.
+
+    Lists all API contracts from specs/domain/api-contracts.yaml,
+    organized by tags for easy browsing by external consumers.
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    config = load_config(root)
+    contracts_data = config.get("api_contracts", {})
+    contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+
+    if not contracts:
+        return "No API contracts defined. Add them to specs/domain/api-contracts.yaml."
+
+    # Group by tag
+    by_tag: dict[str, list[dict]] = {}
+    for c in contracts:
+        tags = c.get("tags", ["untagged"])
+        for tag in tags:
+            by_tag.setdefault(tag, []).append(c)
+
+    lines = ["# API Catalog", ""]
+    lines.append(f"Total: {len(contracts)} endpoint(s) across {len(by_tag)} tag(s).")
+    lines.append("")
+
+    for tag, tag_contracts in sorted(by_tag.items()):
+        lines.append(f"## {tag}")
+        lines.append("")
+        for c in tag_contracts:
+            ep = c.get("endpoint", "?")
+            desc = c.get("description", "")
+            auth = c.get("auth", "")
+            lines.append(f"- **{ep}** — {desc}")
+            if auth:
+                lines.append(f"  - Auth: {auth}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 @mcp.resource("evospec://entities")
 def get_entity_registry() -> str:
     """[DEPRECATED — use evospec:get_entities tool] Return the domain entity registry."""
@@ -129,39 +309,79 @@ def get_all_invariants() -> str:
 
 
 @mcp.tool()
-def list_specs() -> dict:
-    """List all change specs with their zone, status, and available artifacts."""
+def list_specs(
+    status: str | None = None,
+    include_archived: bool = False,
+) -> dict:
+    """List all change specs with their zone, status, and available artifacts.
+
+    By default, archived specs (in specs/archive/) are excluded.
+    Completed and abandoned specs in specs/changes/ are always shown
+    unless filtered by status.
+
+    Args:
+        status: Filter by status (e.g., 'draft', 'in-progress', 'completed')
+        include_archived: Include specs from specs/archive/ (default: False)
+    """
     import yaml
 
     root = _find_root()
     if root is None:
         return {"error": "No evospec.yaml found. Run `evospec init` first."}
 
-    specs_dir = root / "specs" / "changes"
-    if not specs_dir.exists():
-        return {"specs": [], "count": 0}
+    specs_dirs = [root / "specs" / "changes"]
+    if include_archived:
+        archive_dir = root / "specs" / "archive"
+        if archive_dir.exists():
+            specs_dirs.append(archive_dir)
 
     results = []
-    for spec_dir in sorted(specs_dir.iterdir()):
-        spec_yaml = spec_dir / "spec.yaml"
-        if not spec_yaml.exists():
+    archived_count = 0
+    for specs_dir in specs_dirs:
+        if not specs_dir.exists():
             continue
-        spec = yaml.safe_load(spec_yaml.read_text()) or {}
-        artifacts = []
-        for artifact in ["discovery-spec.md", "domain-contract.md", "tasks.md"]:
-            if (spec_dir / artifact).exists():
-                artifacts.append(artifact)
-        results.append({
-            "id": spec.get("id", spec_dir.name),
-            "title": spec.get("title", spec_dir.name),
-            "zone": spec.get("zone", "unknown"),
-            "status": spec.get("status", "draft"),
-            "risk": spec.get("classification", {}).get("risk", "unknown"),
-            "artifacts": artifacts,
-            "path": str(spec_dir.relative_to(root)),
-        })
+        is_archive = specs_dir.name == "archive"
+        for spec_dir in sorted(specs_dir.iterdir()):
+            spec_yaml = spec_dir / "spec.yaml"
+            if not spec_yaml.exists():
+                continue
+            spec = yaml.safe_load(spec_yaml.read_text()) or {}
+            spec_status = spec.get("status", "draft")
 
-    return {"specs": results, "count": len(results)}
+            if is_archive:
+                archived_count += 1
+
+            # Filter by status if requested
+            if status and spec_status.lower() != status.lower():
+                continue
+
+            artifacts = []
+            for artifact in ["discovery-spec.md", "domain-contract.md", "tasks.md"]:
+                if (spec_dir / artifact).exists():
+                    artifacts.append(artifact)
+            entry = {
+                "id": spec.get("id", spec_dir.name),
+                "title": spec.get("title", spec_dir.name),
+                "zone": spec.get("zone", "unknown"),
+                "status": spec_status,
+                "risk": spec.get("classification", {}).get("risk", "unknown"),
+                "artifacts": artifacts,
+                "path": str(spec_dir.relative_to(root)),
+                "invariant_count": len(spec.get("invariants", [])),
+            }
+            if is_archive:
+                entry["archived"] = True
+            results.append(entry)
+
+    result = {"specs": results, "count": len(results)}
+    if not include_archived and archived_count == 0:
+        # Check if archive dir exists and has specs
+        archive_dir = root / "specs" / "archive"
+        if archive_dir.exists():
+            archive_count = sum(1 for d in archive_dir.iterdir() if (d / "spec.yaml").exists())
+            if archive_count > 0:
+                result["note"] = f"{archive_count} archived spec(s) hidden. Set include_archived=True to see them."
+    return result
 
 
 @mcp.tool()
@@ -452,12 +672,39 @@ def check_invariant_impact(
 
             # Check for conflict: entity overlap, context overlap, or keyword match
             reasons = []
+            scope = inv.get("scope", "entity")
 
             for entity in entities:
                 if entity in statement_lower:
                     reasons.append(f"touches entity '{entity}' mentioned in invariant")
                 if entity in spec_entities:
                     reasons.append(f"touches entity '{entity}' in same spec")
+
+                # Relationship invariant: check source/target
+                if scope == "relationship":
+                    inv_source = (inv.get("source") or "").lower()
+                    inv_target = (inv.get("target") or "").lower()
+                    card = inv.get("cardinality", "")
+                    if entity == inv_source:
+                        reasons.append(
+                            f"touches source entity of cardinality constraint "
+                            f"({inv_source} → {inv_target}: {card})"
+                        )
+                    if entity == inv_target:
+                        reasons.append(
+                            f"touches target entity of cardinality constraint "
+                            f"({inv_source} → {inv_target}: {card})"
+                        )
+
+                # Transition invariant: check entity
+                if scope == "transition":
+                    inv_entity = (inv.get("entity") or "").lower()
+                    inv_field = inv.get("field", "")
+                    if entity == inv_entity:
+                        reasons.append(
+                            f"touches entity with state machine constraint "
+                            f"({inv_entity}.{inv_field})"
+                        )
 
             for ctx in contexts:
                 if ctx == bc:
@@ -1120,20 +1367,29 @@ def parse_contract_file(file_path: str) -> dict:
 def get_entities(
     context: str | None = None,
     upstream: str | None = None,
+    include_deprecated: bool = False,
 ) -> dict:
     """Get domain entities, optionally filtered by bounded context or upstream.
 
     Returns the entity registry as structured data. Use this instead of the
     deprecated evospec://entities resource.
 
+    Entities support lifecycle fields:
+      status: active | deprecated | removed (default: active)
+      deprecated_at: ISO date when deprecated
+      replacement: name of the replacement entity
+
+    By default, deprecated/removed entities are excluded.
+
     Args:
         context: Filter by bounded context name (case-insensitive)
         upstream: Filter by upstream service name (e.g., 'order-service')
+        include_deprecated: Include deprecated/removed entities (default: False)
     """
-    text = _build_entity_registry(context=context, upstream=upstream)
+    text = _build_entity_registry(context=context, upstream=upstream, include_deprecated=include_deprecated)
     return {
         "text": text,
-        "filters": {"context": context, "upstream": upstream},
+        "filters": {"context": context, "upstream": upstream, "include_deprecated": include_deprecated},
     }
 
 
@@ -1155,6 +1411,373 @@ def get_invariants(context: str | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Consumer-facing tools — API contracts, file schemas, consumer context
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_api_contract(
+    endpoint: str | None = None,
+    tag: str | None = None,
+    include_deprecated: bool = False,
+) -> dict:
+    """Get API contracts from specs/domain/api-contracts.yaml.
+
+    Returns structured API contracts with endpoint, params, request/response
+    schemas, auth, and tags. Use this when building integrations against
+    a team's API.
+
+    By default, deprecated contracts are excluded. Set include_deprecated=True
+    to see them (they will be annotated with deprecation warnings).
+
+    Contracts support lifecycle fields:
+      status: active | deprecated | removed (default: active)
+      deprecated_at: ISO date when deprecated
+      sunset_date: ISO date when the endpoint will be removed
+      replacement: endpoint path of the replacement
+
+    Args:
+        endpoint: Filter by endpoint path (substring match, case-insensitive)
+        tag: Filter by tag (e.g., 'orders', 'read')
+        include_deprecated: Include deprecated/removed contracts (default: False)
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    contracts_data = config.get("api_contracts", {})
+    contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+    if isinstance(contracts_data, list):
+        contracts = contracts_data
+
+    if not contracts:
+        return {"contracts": [], "count": 0, "note": "No API contracts defined. Add them to specs/domain/api-contracts.yaml."}
+
+    # Filter
+    results = contracts
+    if endpoint:
+        ep_lower = endpoint.lower()
+        results = [c for c in results if ep_lower in (c.get("endpoint") or "").lower()]
+    if tag:
+        tag_lower = tag.lower()
+        results = [c for c in results if tag_lower in [t.lower() for t in c.get("tags", [])]]
+
+    # Deprecation handling
+    deprecated_count = 0
+    warnings = []
+    filtered = []
+    for c in results:
+        status = (c.get("status") or "active").lower()
+        if status in ("deprecated", "removed"):
+            deprecated_count += 1
+            replacement = c.get("replacement", "")
+            sunset = c.get("sunset_date", "")
+            ep = c.get("endpoint", "?")
+            warn = f"{ep} is {status}"
+            if replacement:
+                warn += f" — use {replacement} instead"
+            if sunset:
+                warn += f" (sunset: {sunset})"
+            warnings.append(warn)
+            if not include_deprecated:
+                continue
+        filtered.append(c)
+
+    result = {
+        "contracts": filtered,
+        "count": len(filtered),
+        "total": len(contracts),
+        "filters": {"endpoint": endpoint, "tag": tag, "include_deprecated": include_deprecated},
+    }
+    if deprecated_count > 0:
+        result["deprecated_count"] = deprecated_count
+        result["deprecation_warnings"] = warnings
+        if not include_deprecated:
+            result["note"] = f"{deprecated_count} deprecated/removed contract(s) hidden. Set include_deprecated=True to see them."
+    return result
+
+
+@mcp.tool()
+def get_file_schema(
+    name: str | None = None,
+    fmt: str | None = None,
+) -> dict:
+    """Get file/response schemas from specs/domain/file-schemas.yaml.
+
+    Returns structured file schemas with name, format, structure, and examples.
+    Use this when parsing files or API responses from a service.
+
+    Args:
+        name: Filter by schema name (substring match, case-insensitive)
+        fmt: Filter by format (e.g., 'json', 'csv', 'xml')
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    schemas_data = config.get("file_schemas", {})
+    schemas = schemas_data.get("schemas", []) if isinstance(schemas_data, dict) else []
+    if isinstance(schemas_data, list):
+        schemas = schemas_data
+
+    if not schemas:
+        return {"schemas": [], "count": 0, "note": "No file schemas defined. Add them to specs/domain/file-schemas.yaml."}
+
+    results = schemas
+    if name:
+        name_lower = name.lower()
+        results = [s for s in results if name_lower in (s.get("name") or "").lower()]
+    if fmt:
+        fmt_lower = fmt.lower()
+        results = [s for s in results if fmt_lower == (s.get("format") or "").lower()]
+
+    return {
+        "schemas": results,
+        "count": len(results),
+        "total": len(schemas),
+        "filters": {"name": name, "format": fmt},
+    }
+
+
+@mcp.tool()
+def get_consumer_context(intent: str) -> dict:
+    """Get combined context for an external consumer based on their intent.
+
+    Combines API contracts, file schemas, domain entities, and glossary
+    to give an AI agent everything it needs to generate correct integration
+    code on the first try.
+
+    Args:
+        intent: Natural language description of what the consumer wants to do
+                (e.g., 'download and parse order exports', 'create a new order')
+    """
+    from evospec.core.config import load_config
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    config = load_config(root)
+    intent_lower = intent.lower()
+    intent_words = set(intent_lower.split())
+
+    # Search API contracts by keyword overlap (exclude deprecated)
+    contracts_data = config.get("api_contracts", {})
+    all_contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+    matching_contracts = []
+    deprecation_warnings = []
+    for c in all_contracts:
+        contract_status = (c.get("status") or "active").lower()
+        if contract_status in ("deprecated", "removed"):
+            ep = c.get("endpoint", "?")
+            replacement = c.get("replacement", "")
+            warn = f"{ep} is {contract_status}"
+            if replacement:
+                warn += f" — use {replacement} instead"
+            deprecation_warnings.append(warn)
+            continue
+        score = 0
+        ep = (c.get("endpoint") or "").lower()
+        desc = (c.get("description") or "").lower()
+        tags = [t.lower() for t in c.get("tags", [])]
+        # Score: endpoint keyword match, description match, tag match
+        for word in intent_words:
+            if word in ep:
+                score += 2
+            if word in desc:
+                score += 2
+            if word in tags:
+                score += 3
+        if score > 0:
+            matching_contracts.append({"contract": c, "relevance": score})
+    matching_contracts.sort(key=lambda x: x["relevance"], reverse=True)
+
+    # Search file schemas by keyword overlap
+    schemas_data = config.get("file_schemas", {})
+    all_schemas = schemas_data.get("schemas", []) if isinstance(schemas_data, dict) else []
+    matching_schemas = []
+    for s in all_schemas:
+        score = 0
+        name = (s.get("name") or "").lower()
+        desc = (s.get("description") or "").lower()
+        fmt = (s.get("format") or "").lower()
+        for word in intent_words:
+            if word in name:
+                score += 2
+            if word in desc:
+                score += 2
+            if word in fmt:
+                score += 1
+        if score > 0:
+            matching_schemas.append({"schema": s, "relevance": score})
+    matching_schemas.sort(key=lambda x: x["relevance"], reverse=True)
+
+    # Find relevant entities (exclude deprecated)
+    entities = config.get("domain", {}).get("entities", [])
+    matching_entities = []
+    for e in entities:
+        ent_status = (e.get("status") or "active").lower()
+        if ent_status in ("deprecated", "removed"):
+            replacement = e.get("replacement", "")
+            warn = f"Entity '{e.get('name', '?')}' is {ent_status}"
+            if replacement:
+                warn += f" — use {replacement} instead"
+            deprecation_warnings.append(warn)
+            continue
+        name = (e.get("name") or "").lower()
+        ctx = (e.get("context") or "").lower()
+        desc = (e.get("description") or "").lower()
+        for word in intent_words:
+            if word in name or word in ctx or word in desc:
+                matching_entities.append(e.get("name"))
+                break
+
+    # Get glossary terms
+    glossary_path = root / "specs" / "domain" / "glossary.md"
+    glossary_excerpt = ""
+    if glossary_path.exists():
+        glossary_text = glossary_path.read_text()
+        # Extract rows that match intent keywords
+        relevant_lines = []
+        for line in glossary_text.split("\n"):
+            line_lower = line.lower()
+            for word in intent_words:
+                if len(word) > 3 and word in line_lower:
+                    relevant_lines.append(line)
+                    break
+        if relevant_lines:
+            glossary_excerpt = "\n".join(relevant_lines[:10])
+
+    result = {
+        "intent": intent,
+        "api_contracts": [m["contract"] for m in matching_contracts[:5]],
+        "file_schemas": [m["schema"] for m in matching_schemas[:5]],
+        "related_entities": matching_entities[:10],
+        "glossary_excerpt": glossary_excerpt,
+        "guidance": (
+            "Use the API contracts for endpoint details, params, and response schemas. "
+            "Use file schemas for parsing downloaded files or structured responses. "
+            "Cross-reference entity names with the domain glossary for correct terminology."
+        ),
+    }
+    if deprecation_warnings:
+        result["deprecation_warnings"] = deprecation_warnings
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Sync & Verification tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("evospec://drift-report")
+def get_drift_report() -> str:
+    """Return current spec drift analysis (compares specs against recent git changes)."""
+    from evospec.core.sync import run_sync
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    import os
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        report = run_sync(ci=True)
+        return json.dumps(report.to_dict(), indent=2)
+    finally:
+        os.chdir(old_cwd)
+
+
+@mcp.resource("evospec://verification")
+def get_verification_report() -> str:
+    """Return spec verification report (accuracy of specs vs implementation)."""
+    import os
+
+    root = _find_root()
+    if root is None:
+        return "ERROR: No evospec.yaml found."
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        from evospec.core.verify import run_verify
+        report = run_verify(output_format="json")
+        return json.dumps(report.to_dict(), indent=2)
+    finally:
+        os.chdir(old_cwd)
+
+
+@mcp.tool()
+def check_drift(since: str | None = None) -> dict:
+    """Run drift detection: compare git changes against domain specs.
+
+    Analyzes git diffs to find entity field changes, new/removed API endpoints,
+    and potential invariant impacts. Returns a drift score (0-100%).
+
+    Args:
+        since: Git ref (commit, tag, branch) to compare from. If None, compares working tree against HEAD.
+    """
+    import os
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        from evospec.core.sync import run_sync
+        report = run_sync(since=since, ci=True)
+        return report.to_dict()
+    finally:
+        os.chdir(old_cwd)
+
+
+@mcp.tool()
+def verify_spec(strict: bool = False) -> dict:
+    """Verify spec accuracy against implementation code.
+
+    Checks 5 levels: entity fields, API endpoints, invariant enforcement,
+    bounded context structure, and cross-spec consistency. Returns scores
+    for each level and an overall score (0-100%).
+
+    Args:
+        strict: If True, returns failure status when scores are below configured thresholds.
+    """
+    import os
+
+    root = _find_root()
+    if root is None:
+        return {"error": "No evospec.yaml found."}
+
+    old_cwd = os.getcwd()
+    os.chdir(root)
+    try:
+        from evospec.core.verify import run_verify
+        report = run_verify(output_format="json", strict=False)
+        result = report.to_dict()
+        if strict:
+            from evospec.core.config import load_config
+            config = load_config(root)
+            thresholds = config.get("verification", {})
+            min_overall = thresholds.get("min_overall_score", 0)
+            if report.overall_score < min_overall:
+                result["status"] = "FAIL"
+            else:
+                result["status"] = "PASS"
+        return result
+    finally:
+        os.chdir(old_cwd)
+
+
+# ---------------------------------------------------------------------------
 # Prompts — removed (replaced by Skills)
 # ---------------------------------------------------------------------------
 # discover_feature and domain_contract prompts have been removed.
@@ -1169,6 +1792,7 @@ def get_invariants(context: str | None = None) -> dict:
 def _build_entity_registry(
     context: str | None = None,
     upstream: str | None = None,
+    include_deprecated: bool = False,
 ) -> str:
     """Build entity registry text, optionally filtered by context or upstream."""
     from evospec.core.config import load_config
@@ -1205,11 +1829,26 @@ def _build_entity_registry(
                     continue
                 entities.append(ent_copy)
 
+    # Filter deprecated entities
+    deprecated_names: list[str] = []
+    if not include_deprecated:
+        active = []
+        for ent in entities:
+            status = (ent.get("status") or "active").lower()
+            if status in ("deprecated", "removed"):
+                deprecated_names.append(ent.get("name", "?"))
+                continue
+            active.append(ent)
+        entities = active
+
     if not entities:
         return "No entities found matching the filter."
 
     lines = ["# Domain Entity Registry", ""]
     lines.append(f"Total: {len(entities)} entities.\n")
+    if deprecated_names:
+        lines.append(f"*{len(deprecated_names)} deprecated/removed entity(ies) hidden: {', '.join(deprecated_names)}*")
+        lines.append("")
 
     by_context: dict[str, list[dict]] = {}
     for ent in entities:
@@ -1224,7 +1863,17 @@ def _build_entity_registry(
             table = ent.get("table", "")
             agg = " (aggregate root)" if ent.get("aggregate_root") else ""
             upstream_tag = f" [upstream: {ent['_upstream']}]" if "_upstream" in ent else ""
-            lines.append(f"### {name}{agg}{upstream_tag}")
+            ent_status = (ent.get("status") or "active").lower()
+            dep_tag = ""
+            if ent_status == "deprecated":
+                dep_tag = " [DEPRECATED"
+                replacement = ent.get("replacement", "")
+                if replacement:
+                    dep_tag += f" — use {replacement}"
+                dep_tag += "]"
+            elif ent_status == "removed":
+                dep_tag = " [REMOVED]"
+            lines.append(f"### {name}{agg}{upstream_tag}{dep_tag}")
             if table:
                 lines.append(f"Table: `{table}`")
 
@@ -1263,13 +1912,21 @@ def _build_invariants_text(context: str | None = None) -> str:
         return "ERROR: No evospec.yaml found."
 
     specs_dir = root / "specs" / "changes"
-    if not specs_dir.exists():
+    archive_dir = root / "specs" / "archive"
+    if not specs_dir.exists() and not archive_dir.exists():
         return "No specs directory found."
 
     lines = ["# All Invariants (Core Safety Net)", ""]
     count = 0
 
-    for spec_dir in sorted(specs_dir.iterdir()):
+    # Scan both changes/ and archive/ — invariants are permanent safety nets
+    all_spec_dirs: list[Path] = []
+    if specs_dir.exists():
+        all_spec_dirs.extend(sorted(specs_dir.iterdir()))
+    if archive_dir.exists():
+        all_spec_dirs.extend(sorted(archive_dir.iterdir()))
+
+    for spec_dir in all_spec_dirs:
         spec_yaml = spec_dir / "spec.yaml"
         if not spec_yaml.exists():
             continue
@@ -1296,11 +1953,30 @@ def _build_invariants_text(context: str | None = None) -> str:
             statement = inv.get("statement", "")
             enforcement = inv.get("enforcement", "")
             ff = inv.get("fitness_function", "")
-            lines.append(f"- **{inv_id}**: {statement}")
+            scope = inv.get("scope", "entity")
+            lines.append(f"- **{inv_id}** [scope: {scope}]: {statement}")
             if enforcement:
                 lines.append(f"  - Enforcement: {enforcement}")
             if ff:
                 lines.append(f"  - Fitness function: `{ff}`")
+            # Relationship-specific fields
+            if scope == "relationship":
+                source = inv.get("source", "")
+                target = inv.get("target", "")
+                card = inv.get("cardinality", "")
+                lines.append(f"  - Relationship: {source} → {target} ({card})")
+            # Transition-specific fields
+            elif scope == "transition":
+                entity = inv.get("entity", "")
+                field = inv.get("field", "")
+                lines.append(f"  - State machine: {entity}.{field}")
+                for t in inv.get("transitions", []):
+                    to_states = ", ".join(t["to"]) if isinstance(t.get("to"), list) else t.get("to", "")
+                    lines.append(f"    - {t.get('from', '?')} → [{to_states}]")
+                for f in inv.get("forbidden", []):
+                    to_val = f.get("to", "?")
+                    reason = f.get("reason", "")
+                    lines.append(f"    - ✗ {f.get('from', '?')} → {to_val} (forbidden: {reason})")
             count += 1
 
         lines.append("")

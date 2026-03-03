@@ -51,12 +51,17 @@ Start: `evospec serve`
 - `evospec:get_invariants`
 - `evospec:get_upstream_apis`
 - `evospec:parse_contract_file`
+- `evospec:get_api_contract`
+- `evospec:get_file_schema`
+- `evospec:get_consumer_context`
 
 **Resources** (ambient context):
 - `evospec://bootstrap`
 - `evospec://project`
 - `evospec://glossary`
 - `evospec://context-map`
+- `evospec://skills`
+- `evospec://api-catalog`
 - `evospec://config`
 - `evospec://entities`
 - `evospec://invariants`

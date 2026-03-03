@@ -18,12 +18,20 @@ from evospec.core.config import find_project_root, load_config, get_paths
 console = Console()
 
 
-def reverse_engineer_deps(source: str | None = None) -> None:
+def reverse_engineer_deps(
+    source: str | None = None,
+    deep: bool = False,
+    write: bool = False,
+) -> None:
     """Scan source files for backend API calls and map to known specs."""
     root = find_project_root()
     if root is None:
         console.print("[red]✗ No evospec.yaml found. Run `evospec init` first.[/red]")
         return
+
+    if write and not deep:
+        console.print("[yellow]⚠ --write requires --deep. Running shallow scan.[/yellow]")
+        write = False
 
     config = load_config(root)
 
@@ -91,6 +99,31 @@ def reverse_engineer_deps(source: str | None = None) -> None:
         console.print(f"  [green]✓ {len(matched)} traced to core/hybrid specs[/green]")
     if unmatched:
         console.print(f"  [yellow]⚠ {len(unmatched)} unmatched (new backend work?)[/yellow]")
+    # Deep extraction: payload schemas, message queues, storage ops
+    if deep:
+        console.print(f"\n[bold magenta]Deep extraction:[/bold magenta]")
+
+        mq_deps = _scan_message_queues(source_dirs)
+        if mq_deps:
+            console.print(f"\n  [bold]Message queues ({len(mq_deps)}):[/bold]\n")
+            for mq in mq_deps:
+                role = mq.get("role", "?")
+                topic = mq.get("topic", "?")
+                console.print(f"    {role}: [cyan]{topic}[/cyan]  [dim]← {mq.get('source_file', '?')}:{mq.get('line', '?')}[/dim]")
+        else:
+            console.print("  [dim]No message queue dependencies detected.[/dim]")
+
+        storage_ops = _scan_storage_ops(source_dirs)
+        if storage_ops:
+            console.print(f"\n  [bold]Storage operations ({len(storage_ops)}):[/bold]\n")
+            for op in storage_ops:
+                console.print(
+                    f"    {op.get('type', '?')}: [cyan]{op.get('target', '?')}[/cyan] "
+                    f"[dim]← {op.get('source_file', '?')}:{op.get('line', '?')}[/dim]"
+                )
+        else:
+            console.print("  [dim]No storage operations detected.[/dim]")
+
     console.print()
     console.print(
         "Use these findings to populate traceability.endpoints in your edge/hybrid spec.yaml."
@@ -415,3 +448,111 @@ def _paths_match(call_path: str, spec_path: str) -> bool:
             return False
 
     return True
+
+
+# ---------------------------------------------------------------------------
+# Deep extraction — message queues, storage operations
+# ---------------------------------------------------------------------------
+
+def _scan_message_queues(source_dirs: list[Path]) -> list[dict]:
+    """Detect message queue producers/consumers (Kafka, RabbitMQ, SQS, etc.)."""
+    deps: list[dict] = []
+    extensions = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".java", ".kt"}
+
+    patterns = [
+        # Kafka
+        (r'(?:producer|kafka)\.(?:send|produce)\s*\(\s*["\']([^"\']+)["\']', "producer", "kafka"),
+        (r'(?:consumer|kafka)\.(?:subscribe|consume)\s*\(\s*["\']([^"\']+)["\']', "consumer", "kafka"),
+        (r'@KafkaListener\s*\([^)]*topics?\s*=\s*["\']([^"\']+)["\']', "consumer", "kafka"),
+        (r'kafkaTemplate\.send\s*\(\s*["\']([^"\']+)["\']', "producer", "kafka"),
+        # RabbitMQ
+        (r'(?:channel|rabbit)\.(?:publish|sendToQueue|basicPublish)\s*\(\s*["\']([^"\']+)["\']', "producer", "rabbitmq"),
+        (r'@RabbitListener\s*\([^)]*queues?\s*=\s*["\']([^"\']+)["\']', "consumer", "rabbitmq"),
+        (r'(?:channel|rabbit)\.(?:consume|basicConsume)\s*\(\s*["\']([^"\']+)["\']', "consumer", "rabbitmq"),
+        # AWS SQS/SNS
+        (r'sqs\.(?:sendMessage|send_message)\s*\([^)]*QueueUrl\s*[:=]\s*["\']([^"\']+)["\']', "producer", "sqs"),
+        (r'sns\.(?:publish|Publish)\s*\([^)]*TopicArn\s*[:=]\s*["\']([^"\']+)["\']', "producer", "sns"),
+        # Redis pub/sub
+        (r'redis\.(?:publish|PUBLISH)\s*\(\s*["\']([^"\']+)["\']', "producer", "redis"),
+        (r'redis\.(?:subscribe|SUBSCRIBE)\s*\(\s*["\']([^"\']+)["\']', "consumer", "redis"),
+        # NATS
+        (r'nats\.(?:publish|Publish)\s*\(\s*["\']([^"\']+)["\']', "producer", "nats"),
+        (r'nats\.(?:subscribe|Subscribe)\s*\(\s*["\']([^"\']+)["\']', "consumer", "nats"),
+        # Generic event patterns
+        (r'\.emit\s*\(\s*["\']([^"\']+)["\']', "producer", "event"),
+        (r'\.on\s*\(\s*["\']([^"\']+)["\']', "consumer", "event"),
+    ]
+
+    for source_dir in source_dirs:
+        if not source_dir.exists():
+            continue
+        for src_file in sorted(source_dir.rglob("*")):
+            if src_file.suffix not in extensions or not src_file.is_file():
+                continue
+            file_str = str(src_file)
+            if any(skip in file_str for skip in ["node_modules", ".next", "dist/", "build/", "__pycache__"]):
+                continue
+            try:
+                content = src_file.read_text()
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            for pattern, role, system in patterns:
+                for match in re.finditer(pattern, content):
+                    topic = match.group(1)
+                    # Skip overly generic event names
+                    if system == "event" and len(topic) < 4:
+                        continue
+                    deps.append({
+                        "role": role,
+                        "topic": topic,
+                        "system": system,
+                        "source_file": str(src_file),
+                        "line": content[:match.start()].count("\n") + 1,
+                    })
+
+    return deps
+
+
+def _scan_storage_ops(source_dirs: list[Path]) -> list[dict]:
+    """Detect storage operations (S3, GCS, file system, etc.)."""
+    ops: list[dict] = []
+    extensions = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".go", ".java", ".kt"}
+
+    patterns = [
+        # AWS S3
+        (r's3\.(?:putObject|PutObject|upload|getObject|GetObject)\s*\([^)]*(?:Bucket|bucket)\s*[:=]\s*["\']([^"\']+)["\']', "s3"),
+        (r's3\.(?:putObject|upload)\s*\(\s*["\']([^"\']+)["\']', "s3"),
+        # GCS
+        (r'storage\.bucket\s*\(\s*["\']([^"\']+)["\']', "gcs"),
+        # Redis (data storage, not pub/sub)
+        (r'redis\.(?:set|get|hset|hget|lpush|rpush|zadd)\s*\(\s*["\']([^"\']+)["\']', "redis-store"),
+        # File system writes
+        (r'(?:writeFile|writeFileSync|write_text|Write)\s*\(\s*["\']([^"\']+)["\']', "filesystem"),
+    ]
+
+    for source_dir in source_dirs:
+        if not source_dir.exists():
+            continue
+        for src_file in sorted(source_dir.rglob("*")):
+            if src_file.suffix not in extensions or not src_file.is_file():
+                continue
+            file_str = str(src_file)
+            if any(skip in file_str for skip in ["node_modules", ".next", "dist/", "build/", "__pycache__"]):
+                continue
+            try:
+                content = src_file.read_text()
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            for pattern, storage_type in patterns:
+                for match in re.finditer(pattern, content):
+                    target = match.group(1)
+                    ops.append({
+                        "type": storage_type,
+                        "target": target,
+                        "source_file": str(src_file),
+                        "line": content[:match.start()].count("\n") + 1,
+                    })
+
+    return ops

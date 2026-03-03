@@ -17,6 +17,7 @@ def init_project(
     name: str,
     description: str = "",
     detection: "ProjectDetection | None" = None,
+    specs_dir: str | None = None,
 ) -> None:
     """Initialize EvoSpec directory structure and config in the current directory.
 
@@ -24,6 +25,8 @@ def init_project(
         name: Project name.
         description: Short project description.
         detection: Optional auto-detected project stack (from ``evospec prompt --detect``).
+        specs_dir: Optional custom spec folder prefix (e.g., 'evospec' or '.evospec').
+                   Sets paths.specs to '{specs_dir}/changes' and paths.domain to '{specs_dir}/domain'.
     """
     project_root = Path.cwd()
     config_path = project_root / "evospec.yaml"
@@ -43,17 +46,31 @@ def init_project(
         'description: ""', f'description: "{description}"', 1
     )
 
-    # Pre-fill reverse config from detection results
-    if detection:
+    # Apply custom spec folder if provided
+    if specs_dir or detection:
         import yaml as _yaml
 
         config_data = _yaml.safe_load(config_content) or {}
-        reverse = config_data.get("reverse", {})
-        if detection.framework and not reverse.get("framework"):
-            reverse["framework"] = detection.framework
-        if detection.source_dirs and not reverse.get("source_dirs"):
-            reverse["source_dirs"] = detection.source_dirs
-        config_data["reverse"] = reverse
+
+        # Custom spec folder paths
+        if specs_dir:
+            specs_dir = specs_dir.rstrip("/")
+            paths = config_data.get("paths", {})
+            paths["specs"] = f"{specs_dir}/changes"
+            paths["domain"] = f"{specs_dir}/domain"
+            paths["templates"] = f"{specs_dir}/_templates"
+            paths["checks"] = f"{specs_dir}/checks"
+            config_data["paths"] = paths
+
+        # Pre-fill reverse config from detection results
+        if detection:
+            reverse = config_data.get("reverse", {})
+            if detection.framework and not reverse.get("framework"):
+                reverse["framework"] = detection.framework
+            if detection.source_dirs and not reverse.get("source_dirs"):
+                reverse["source_dirs"] = detection.source_dirs
+            config_data["reverse"] = reverse
+
         config_content = _yaml.dump(config_data, default_flow_style=False, sort_keys=False)
 
     with open(config_path, "w") as f:
@@ -61,14 +78,17 @@ def init_project(
 
     console.print(f"[green]✓[/green] Created evospec.yaml")
 
-    # Create directory structure
-    default_paths = get_paths({})
+    # Create directory structure (use configured paths, not defaults)
+    import yaml as _yaml
+
+    _config_data = _yaml.safe_load(config_content) or {}
+    configured_paths = get_paths(_config_data)
     dirs_to_create = [
-        default_paths["specs"],
-        default_paths["templates"],
-        default_paths["adrs"],
-        default_paths["domain"],
-        default_paths["checks"],
+        configured_paths["specs"],
+        configured_paths["templates"],
+        configured_paths["adrs"],
+        configured_paths["domain"],
+        configured_paths["checks"],
     ]
 
     for dir_path in dirs_to_create:
@@ -77,19 +97,19 @@ def init_project(
         console.print(f"[green]✓[/green] Created {dir_path}/")
 
     # Copy templates to project
-    templates_dest = project_root / default_paths["templates"]
+    templates_dest = project_root / configured_paths["templates"]
     for template_file in TEMPLATE_DIR.glob("*.md"):
         dest = templates_dest / template_file.name
         if not dest.exists():
             shutil.copy2(template_file, dest)
             console.print(f"[green]✓[/green] Copied template {template_file.name}")
 
-    # Create domain file stubs (entities, contexts, features)
-    domain_dir = project_root / default_paths["domain"]
+    # Create domain file stubs (entities, contexts, features, skills)
+    domain_dir = project_root / configured_paths["domain"]
     _create_domain_stubs(domain_dir)
 
     # Create glossary stub
-    glossary_path = project_root / default_paths["domain"] / "glossary.md"
+    glossary_path = project_root / configured_paths["domain"] / "glossary.md"
     if not glossary_path.exists():
         glossary_path.write_text(
             "# Ubiquitous Language — Glossary\n\n"
@@ -101,7 +121,7 @@ def init_project(
         console.print("[green]✓[/green] Created domain glossary stub")
 
     # Create context map stub
-    context_map_path = project_root / default_paths["domain"] / "context-map.md"
+    context_map_path = project_root / configured_paths["domain"] / "context-map.md"
     if not context_map_path.exists():
         context_map_path.write_text(
             "# Context Map\n\n"
@@ -121,7 +141,7 @@ def init_project(
     _setup_ai_agents(project_root)
 
     # Create first ADR
-    adr_path = project_root / default_paths["adrs"] / "0001-adopt-evospec.md"
+    adr_path = project_root / configured_paths["adrs"] / "0001-adopt-evospec.md"
     if not adr_path.exists():
         adr_path.write_text(
             f"# ADR-0001: Adopt EvoSpec for spec-driven delivery\n\n"
@@ -196,7 +216,7 @@ def _create_domain_stubs(domain_dir: Path) -> None:
             "#     - \"ORD-INV-001\"\n"
             "[]\n"
         )
-        console.print("[green]✓[/green] Created specs/domain/entities.yaml")
+        console.print(f"[green]✓[/green] Created {entities_path.relative_to(Path.cwd())}")
 
     contexts_path = domain_dir / "contexts.yaml"
     if not contexts_path.exists():
@@ -211,7 +231,7 @@ def _create_domain_stubs(domain_dir: Path) -> None:
             "#   description: \"Order lifecycle from cart to delivery.\"\n"
             "[]\n"
         )
-        console.print("[green]✓[/green] Created specs/domain/contexts.yaml")
+        console.print(f"[green]✓[/green] Created {contexts_path.relative_to(Path.cwd())}")
 
     features_path = domain_dir / "features.yaml"
     if not features_path.exists():
@@ -227,7 +247,86 @@ def _create_domain_stubs(domain_dir: Path) -> None:
             "# to do with features (e.g. a bugfix). Not every change is a feature.\n"
             "[]\n"
         )
-        console.print("[green]✓[/green] Created specs/domain/features.yaml")
+        console.print(f"[green]✓[/green] Created {features_path.relative_to(Path.cwd())}")
+
+    api_contracts_path = domain_dir / "api-contracts.yaml"
+    if not api_contracts_path.exists():
+        api_contracts_path.write_text(
+            "# API Contracts\n"
+            "# Structured API contracts for external consumers and AI agents.\n"
+            "# Served via MCP as evospec://api-catalog and get_api_contract() tool.\n"
+            "#\n"
+            "# Example:\n"
+            "# contracts:\n"
+            "#   - endpoint: \"GET /api/orders/{orderId}\"\n"
+            "#     description: \"Get order details\"\n"
+            "#     params:\n"
+            "#       - name: orderId\n"
+            "#         in: path\n"
+            "#         type: String\n"
+            "#         format: UUID\n"
+            "#         required: true\n"
+            "#     response:\n"
+            "#       200:\n"
+            "#         fields:\n"
+            "#           - name: orderId\n"
+            "#             type: String\n"
+            "#           - name: status\n"
+            "#             type: OrderStatus\n"
+            "#     auth: \"bearer token\"\n"
+            "#     tags: [\"orders\", \"read\"]\n"
+            "contracts: []\n"
+        )
+        console.print(f"[green]✓[/green] Created {api_contracts_path.relative_to(Path.cwd())}")
+
+    file_schemas_path = domain_dir / "file-schemas.yaml"
+    if not file_schemas_path.exists():
+        file_schemas_path.write_text(
+            "# File Schemas\n"
+            "# Describes file formats and response structures for external consumers.\n"
+            "# Served via MCP as get_file_schema() tool.\n"
+            "#\n"
+            "# Example:\n"
+            "# schemas:\n"
+            "#   - name: \"OrderExport\"\n"
+            "#     format: json\n"
+            "#     description: \"JSON export of order data\"\n"
+            "#     version: \"v1\"\n"
+            "#     structure:\n"
+            "#       - name: orderId\n"
+            "#         type: String\n"
+            "#       - name: items\n"
+            "#         type: List<LineItem>\n"
+            "#     example: |\n"
+            "#       { \"orderId\": \"a1b2c3d4\", \"items\": [...] }\n"
+            "schemas: []\n"
+        )
+        console.print(f"[green]✓[/green] Created {file_schemas_path.relative_to(Path.cwd())}")
+
+    skills_path = domain_dir / "skills.yaml"
+    if not skills_path.exists():
+        skills_path.write_text(
+            "# Implementation Skills\n"
+            "# Project-specific coding rules that AI agents should follow.\n"
+            "# These are injected into generated agent files (CLAUDE.md, .windsurf/, .cursor/).\n"
+            "# Served via MCP as evospec://skills.\n"
+            "#\n"
+            "# Categories: error-handling, testing, architecture, naming, dependencies, security\n"
+            "# (you can add your own categories)\n"
+            "#\n"
+            "# Example:\n"
+            "# skills:\n"
+            "#   - category: \"error-handling\"\n"
+            "#     rules:\n"
+            "#       - \"Use Result<T, E> pattern for domain operations\"\n"
+            "#       - \"Map all external API errors to domain-specific error types\"\n"
+            "#   - category: \"testing\"\n"
+            "#     rules:\n"
+            "#       - \"Write integration tests for every API endpoint\"\n"
+            "#       - \"Use factory functions (not fixtures) for test data\"\n"
+            "skills: []\n"
+        )
+        console.print("[green]✓[/green] Created skills.yaml (implementation skills for AI agents)")
 
 
 def _setup_ai_agents(project_root: Path) -> None:

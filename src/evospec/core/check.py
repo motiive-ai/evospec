@@ -137,8 +137,19 @@ def run_checks(strict: bool = False) -> None:
     w_ent = _check_entity_registry(spec_dirs, config, root)
     warnings += w_ent
 
-    # Cross-spec invariant impact check
-    e, w = _check_cross_spec_invariants(spec_dirs, root)
+    # API contracts and file schemas validation
+    e_api, w_api = _check_api_contracts(config)
+    errors += e_api
+    warnings += w_api
+
+    # Cross-spec invariant impact check (include archived specs — invariants are permanent)
+    all_dirs_for_invariants = list(spec_dirs)
+    archive_root = root / "specs" / "archive"
+    if archive_root.exists():
+        all_dirs_for_invariants.extend(sorted(
+            d for d in archive_root.iterdir() if d.is_dir() and (d / "spec.yaml").exists()
+        ))
+    e, w = _check_cross_spec_invariants(all_dirs_for_invariants, root)
     errors += e
     warnings += w
 
@@ -163,6 +174,140 @@ def run_checks(strict: bool = False) -> None:
         raise SystemExit(1)
 
 
+VALID_CARDINALITIES = {"0..1", "1..1", "0..*", "1..*"}
+
+
+def _parse_cardinality(card: str) -> bool:
+    """Check if a cardinality string is valid: 0..1, 1..1, 0..*, 1..*, or N..M."""
+    if card in VALID_CARDINALITIES:
+        return True
+    # N..M pattern
+    parts = card.split("..")
+    if len(parts) == 2:
+        try:
+            int(parts[0])
+            int(parts[1])
+            return True
+        except ValueError:
+            return False
+    return False
+
+
+def _validate_scoped_invariants(invariants: list[dict]) -> tuple[int, int]:
+    """Validate relational and transition invariant schemas (REL-INV-SCHEMA-001, REL-INV-SCHEMA-002)."""
+    errors = 0
+    warnings = 0
+
+    for inv in invariants:
+        scope = inv.get("scope", "entity")
+        inv_id = inv.get("id", "?")
+
+        if scope == "relationship":
+            missing = []
+            if not inv.get("source"):
+                missing.append("source")
+            if not inv.get("target"):
+                missing.append("target")
+            if not inv.get("cardinality"):
+                missing.append("cardinality")
+            if missing:
+                console.print(
+                    f"  [red]✗ {inv_id}: relationship invariant missing required field(s): "
+                    f"{', '.join(missing)}[/red]"
+                )
+                errors += len(missing)
+            else:
+                card = inv["cardinality"]
+                if not _parse_cardinality(card):
+                    console.print(
+                        f"  [yellow]⚠ {inv_id}: invalid cardinality '{card}' "
+                        f"(expected 0..1, 1..1, 0..*, 1..*, or N..M)[/yellow]"
+                    )
+                    warnings += 1
+
+        elif scope == "transition":
+            missing = []
+            if not inv.get("entity"):
+                missing.append("entity")
+            if not inv.get("field"):
+                missing.append("field")
+            if not inv.get("transitions"):
+                missing.append("transitions")
+            if missing:
+                console.print(
+                    f"  [red]✗ {inv_id}: transition invariant missing required field(s): "
+                    f"{', '.join(missing)}[/red]"
+                )
+                errors += len(missing)
+            else:
+                # Validate transition structure
+                for i, t in enumerate(inv["transitions"]):
+                    if not t.get("from"):
+                        console.print(
+                            f"  [yellow]⚠ {inv_id}: transition[{i}] missing 'from' field[/yellow]"
+                        )
+                        warnings += 1
+                    if not t.get("to"):
+                        console.print(
+                            f"  [yellow]⚠ {inv_id}: transition[{i}] missing 'to' field[/yellow]"
+                        )
+                        warnings += 1
+
+        elif scope != "entity":
+            console.print(
+                f"  [yellow]⚠ {inv_id}: unknown scope '{scope}' "
+                f"(expected entity, relationship, or transition)[/yellow]"
+            )
+            warnings += 1
+
+    return errors, warnings
+
+
+def _validate_invariants_against_entities(
+    invariants: list[dict], config: dict,
+) -> tuple[int, int]:
+    """Cross-reference relational invariant source/target against entities.yaml."""
+    errors = 0
+    warnings = 0
+
+    entities = config.get("domain", {}).get("entities", [])
+    if not entities:
+        return 0, 0
+
+    entity_names = {e.get("name", "").lower() for e in entities}
+
+    for inv in invariants:
+        scope = inv.get("scope", "entity")
+        inv_id = inv.get("id", "?")
+
+        if scope == "relationship":
+            source = inv.get("source", "")
+            target = inv.get("target", "")
+            if source and source.lower() not in entity_names:
+                console.print(
+                    f"    [yellow]⚠ {inv_id}: source entity '{source}' "
+                    f"not found in domain registry[/yellow]"
+                )
+                warnings += 1
+            if target and target.lower() not in entity_names:
+                console.print(
+                    f"    [yellow]⚠ {inv_id}: target entity '{target}' "
+                    f"not found in domain registry[/yellow]"
+                )
+                warnings += 1
+
+        elif scope == "transition":
+            entity = inv.get("entity", "")
+            if entity and entity.lower() not in entity_names:
+                console.print(
+                    f"    [yellow]⚠ {inv_id}: entity '{entity}' "
+                    f"not found in domain registry[/yellow]"
+                )
+                warnings += 1
+
+    return errors, warnings
+
+
 def _check_core(spec: dict, spec_dir: Path) -> tuple[int, int]:
     """Check core zone requirements."""
     errors = 0
@@ -184,6 +329,11 @@ def _check_core(spec: dict, spec_dir: Path) -> tuple[int, int]:
                     f"  [yellow]⚠ Invariant {inv.get('id', '?')} has no enforcement mechanism[/yellow]"
                 )
                 warnings += 1
+
+        # Validate relational and transition invariant schemas
+        e, w = _validate_scoped_invariants(invariants)
+        errors += e
+        warnings += w
 
     fitness = spec.get("fitness_functions", [])
     if not fitness:
@@ -264,6 +414,94 @@ def _check_general(spec: dict, spec_dir: Path) -> tuple[int, int]:
     return 0, warnings
 
 
+def _check_api_contracts(config: dict) -> tuple[int, int]:
+    """Validate api-contracts.yaml and file-schemas.yaml structure and cross-references.
+
+    CONSUMER-MCP-001: api-contracts.yaml validates (endpoint, params, response required)
+    CONSUMER-MCP-002: file-schemas.yaml validates (name, format, structure required)
+    CONSUMER-MCP-003: Entity types in api-contracts.yaml exist in entities.yaml
+    """
+    errors = 0
+    warnings = 0
+
+    # Validate API contracts (CONSUMER-MCP-001)
+    contracts_data = config.get("api_contracts", {})
+    contracts = contracts_data.get("contracts", []) if isinstance(contracts_data, dict) else []
+    if isinstance(contracts_data, list):
+        contracts = contracts_data
+
+    if contracts:
+        console.print("[bold]API contracts validation[/bold]")
+        console.print()
+        for c in contracts:
+            ep = c.get("endpoint", "")
+            if not ep:
+                console.print("  [red]✗ API contract missing 'endpoint' field[/red]")
+                errors += 1
+                continue
+            issues = []
+            if not c.get("response"):
+                issues.append("missing 'response'")
+            if not issues:
+                console.print(f"  [green]✓[/green] {ep}")
+            else:
+                console.print(f"  [yellow]⚠ {ep}: {', '.join(issues)}[/yellow]")
+                warnings += len(issues)
+
+        # Cross-reference entity types against entities.yaml (CONSUMER-MCP-003)
+        entities = config.get("domain", {}).get("entities", [])
+        if entities:
+            entity_names = {e.get("name", "").lower() for e in entities}
+            for c in contracts:
+                ep = c.get("endpoint", "?")
+                # Check response field types
+                for status, resp in (c.get("response") or {}).items():
+                    for field in (resp.get("fields") or []):
+                        ftype = field.get("type", "")
+                        # Extract base type (strip List<>, Optional<>, etc.)
+                        base_type = ftype.replace("List<", "").replace("Optional<", "").rstrip(">")
+                        if base_type and base_type[0].isupper() and base_type.lower() not in entity_names:
+                            # Only warn for PascalCase types that look like entities
+                            if base_type not in ("String", "Int", "Integer", "Float", "Decimal",
+                                                  "Boolean", "Bool", "Date", "DateTime", "UUID",
+                                                  "Object", "Any"):
+                                console.print(
+                                    f"    [yellow]⚠ {ep}: response type '{ftype}' "
+                                    f"references unknown entity '{base_type}'[/yellow]"
+                                )
+                                warnings += 1
+        console.print()
+
+    # Validate file schemas (CONSUMER-MCP-002)
+    schemas_data = config.get("file_schemas", {})
+    schemas = schemas_data.get("schemas", []) if isinstance(schemas_data, dict) else []
+    if isinstance(schemas_data, list):
+        schemas = schemas_data
+
+    if schemas:
+        console.print("[bold]File schemas validation[/bold]")
+        console.print()
+        for s in schemas:
+            name = s.get("name", "")
+            if not name:
+                console.print("  [red]✗ File schema missing 'name' field[/red]")
+                errors += 1
+                continue
+            issues = []
+            if not s.get("format"):
+                issues.append("missing 'format'")
+            if not s.get("structure"):
+                issues.append("missing 'structure'")
+            if not issues:
+                console.print(f"  [green]✓[/green] {name} ({s.get('format', '?')})")
+            else:
+                console.print(f"  [yellow]⚠ {name}: {', '.join(issues)}[/yellow]")
+                warnings += len(issues)
+        console.print()
+
+    return errors, warnings
+
+
 def _check_entity_registry(
     spec_dirs: list[Path], config: dict, root: Path,
 ) -> int:
@@ -330,6 +568,19 @@ def _check_entity_registry(
                 console.print(f"    [yellow]⚠[/yellow] {w}")
             warnings += len(spec_warnings)
             console.print()
+
+        # Cross-reference relational/transition invariant entities against registry
+        spec_invariants = spec.get("invariants", [])
+        scoped = [inv for inv in spec_invariants if inv.get("scope") in ("relationship", "transition")]
+        if scoped:
+            _, inv_w = _validate_invariants_against_entities(spec_invariants, config)
+            if inv_w:
+                if not found_any:
+                    console.print("[bold]Entity registry validation[/bold]")
+                    console.print()
+                    found_any = True
+                console.print(f"  [bold]{title}[/bold] [dim]({zone})[/dim] — relational invariant cross-reference")
+            warnings += inv_w
 
     return warnings
 

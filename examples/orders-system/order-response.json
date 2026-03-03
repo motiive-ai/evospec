@@ -1,0 +1,33 @@
+{
+  "order_id": "a1b2c3d4-5678-90ab-cdef-1234567890ab",
+  "customer_id": "cust-001-uuid",
+  "status": "confirmed",
+  "total_amount": 234.50,
+  "created_at": "2026-02-28T14:30:00Z",
+  "items": [
+    {
+      "item_id": "item-001-uuid",
+      "product_name": "Industrial Solvent",
+      "category": {
+        "id": "cat-chem-uuid",
+        "name": "chemical",
+        "restriction_group": "hazmat-food"
+      },
+      "quantity": 5,
+      "unit_price": 29.90,
+      "subtotal": 149.50
+    },
+    {
+      "item_id": "item-002-uuid",
+      "product_name": "Protective Gloves",
+      "category": {
+        "id": "cat-safety-uuid",
+        "name": "safety-equipment",
+        "restriction_group": null
+      },
+      "quantity": 10,
+      "unit_price": 8.50,
+      "subtotal": 85.00
+    }
+  ]
+}

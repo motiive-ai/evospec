@@ -22,6 +22,41 @@ ALL_FRAMEWORKS = sorted(
 )
 
 
+def _auto_detect_framework(root: Path, config: dict) -> str | None:
+    """Auto-detect API framework by scanning source files for imports."""
+    configured = config.get("reverse", {}).get("source_dirs", [])
+    source_dirs = [root / d for d in configured] if configured else [root]
+
+    # Patterns: (framework_name, file_extensions, import_patterns)
+    detectors = [
+        ("fastapi", {".py"}, ["from fastapi", "import fastapi"]),
+        ("django", {".py"}, ["from django.urls", "from django.http", "urlpatterns"]),
+        ("flask", {".py"}, ["from flask", "import flask", "Flask(__name__"]),
+        ("spring", {".java", ".kt"}, ["@RestController", "@RequestMapping", "@GetMapping", "@PostMapping"]),
+        ("gin", {".go"}, ["github.com/gin-gonic/gin"]),
+        ("echo", {".go"}, ["github.com/labstack/echo"]),
+        ("fiber", {".go"}, ["github.com/gofiber/fiber"]),
+        ("chi", {".go"}, ["github.com/go-chi/chi"]),
+        ("express", {".js", ".ts", ".mjs"}, ["require('express')", "require(\"express\")", "from 'express'", "from \"express\""]),
+        ("nextjs", {".js", ".ts", ".jsx", ".tsx"}, ["next/server", "NextResponse", "NextRequest"]),
+        ("nestjs", {".ts"}, ["@nestjs/common", "@Controller", "@Injectable"]),
+        ("hono", {".ts", ".js"}, ["from 'hono'", "from \"hono\"", "require('hono')"]),
+        ("fastify", {".js", ".ts"}, ["require('fastify')", "from 'fastify'", "from \"fastify\""]),
+    ]
+
+    for fw_name, extensions, patterns in detectors:
+        files = _iter_files(source_dirs, extensions)
+        for f in files[:200]:  # limit scan to avoid slowness
+            text = _read_safe(f)
+            if text is None:
+                continue
+            for pattern in patterns:
+                if pattern in text:
+                    console.print(f"[green]✓[/green] Auto-detected framework: [cyan]{fw_name}[/cyan]")
+                    return fw_name
+    return None
+
+
 def _iter_files(source_dirs: list[Path], extensions: set[str]) -> list[Path]:
     """Yield source files matching the given extensions from source_dirs."""
     files: list[Path] = []
@@ -42,18 +77,29 @@ def _read_safe(path: Path) -> str | None:
         return None
 
 
-def reverse_engineer_api(framework: str | None = None, source: str | None = None) -> None:
+def reverse_engineer_api(
+    framework: str | None = None,
+    source: str | None = None,
+    deep: bool = False,
+    write: bool = False,
+) -> None:
     """Scan source code for API endpoints and generate spec stubs."""
     root = find_project_root()
     if root is None:
         console.print("[red]✗ No evospec.yaml found. Run `evospec init` first.[/red]")
         return
 
+    if write and not deep:
+        console.print("[yellow]⚠ --write requires --deep. Running shallow scan.[/yellow]")
+        write = False
+
     config = load_config(root)
     fw = framework or config.get("reverse", {}).get("framework", "")
 
     if not fw:
-        console.print("[red]✗ No framework specified. Use --framework or set reverse.framework in evospec.yaml[/red]")
+        fw = _auto_detect_framework(root, config)
+    if not fw:
+        console.print("[red]✗ No framework detected. Use --framework or set reverse.framework in evospec.yaml[/red]")
         return
 
     source_dirs = []
@@ -63,7 +109,8 @@ def reverse_engineer_api(framework: str | None = None, source: str | None = None
         configured = config.get("reverse", {}).get("source_dirs", [])
         source_dirs = [root / d for d in configured] if configured else [root]
 
-    console.print(f"[bold]Scanning for {fw} endpoints...[/bold]")
+    mode = "[bold magenta]deep[/bold magenta] " if deep else ""
+    console.print(f"[bold]Scanning for {fw} endpoints ({mode}scan)...[/bold]")
 
     endpoints: list[dict[str, str]] = []
 
@@ -109,6 +156,32 @@ def reverse_engineer_api(framework: str | None = None, source: str | None = None
         module = ep.get("module", "?")
         console.print(f"  [cyan]{method:6s}[/cyan] {path}  [dim]→ {module}:{func}[/dim]")
 
+    # Deep extraction: walk DTOs, extract schemas, detect auth/errors
+    deep_contracts: list[dict] = []
+    if deep:
+        console.print(f"\n[bold magenta]Deep extraction:[/bold magenta]")
+        deep_contracts = _deep_extract_api(endpoints, source_dirs, fw)
+        if deep_contracts:
+            console.print(f"  [green]✓[/green] Extracted schemas for {len(deep_contracts)} endpoint(s)")
+            for dc in deep_contracts:
+                ep = dc.get("endpoint", "?")
+                req_fields = len(dc.get("request", {}).get("fields", []))
+                resp_fields = sum(
+                    len(r.get("fields", [])) for r in dc.get("response", {}).values()
+                )
+                auth = dc.get("auth", "")
+                parts = []
+                if req_fields:
+                    parts.append(f"{req_fields} request fields")
+                if resp_fields:
+                    parts.append(f"{resp_fields} response fields")
+                if auth:
+                    parts.append(f"auth: {auth}")
+                detail = ", ".join(parts) if parts else "no schema details"
+                console.print(f"    {ep} — {detail}")
+        else:
+            console.print("  [yellow]⚠ No deep schema details extracted.[/yellow]")
+
     # Group by path prefix to suggest bounded contexts
     contexts = _suggest_contexts(endpoints)
 
@@ -116,6 +189,10 @@ def reverse_engineer_api(framework: str | None = None, source: str | None = None
         console.print(f"\n[bold]Suggested bounded contexts:[/bold]\n")
         for ctx, eps in contexts.items():
             console.print(f"  [cyan]{ctx}[/cyan] ({len(eps)} endpoints)")
+
+    # Write to api-contracts.yaml if --write
+    if write and deep_contracts:
+        _write_api_contracts(root, config, deep_contracts)
 
     console.print(
         f"\n[dim]Use these findings to populate traceability.endpoints in your spec.yaml files.[/dim]"
@@ -731,3 +808,463 @@ def _suggest_contexts(endpoints: list[dict[str, str]]) -> dict[str, list[dict[st
         contexts.setdefault(ctx, []).append(ep)
 
     return contexts
+
+
+# ---------------------------------------------------------------------------
+# Deep extraction — DTO field walking, validation, auth, errors
+# ---------------------------------------------------------------------------
+
+def _deep_extract_api(
+    endpoints: list[dict[str, str]],
+    source_dirs: list[Path],
+    framework: str,
+) -> list[dict]:
+    """Extract request/response schemas from endpoint handler code.
+
+    Walks DTO/model classes referenced by each endpoint to build structured
+    API contracts with field types, validation constraints, auth, and errors.
+    """
+    # Build a class/struct → fields index from all source files
+    class_index = _build_class_index(source_dirs, framework)
+
+    contracts: list[dict] = []
+    for ep in endpoints:
+        method = ep.get("method", "?").upper()
+        path = ep.get("path", "?")
+        func = ep.get("function", "?")
+        module_path = ep.get("module", "")
+
+        if method in ("USE", "GROUP"):
+            continue
+
+        contract: dict = {
+            "endpoint": f"{method} {path}",
+            "description": "",
+            "tags": _tags_from_path(path),
+        }
+
+        # Read the handler file to extract details
+        content = _read_safe(Path(module_path)) if module_path else None
+        if content is None:
+            contracts.append(contract)
+            continue
+
+        # Extract auth annotations
+        auth = _detect_auth(content, func, framework)
+        if auth:
+            contract["auth"] = auth
+
+        # Extract request body type and fields
+        req_type = _detect_request_type(content, func, framework)
+        if req_type and req_type in class_index:
+            contract["request"] = {
+                "content_type": "application/json",
+                "body_class": req_type,
+                "fields": class_index[req_type],
+            }
+
+        # Extract response type and fields
+        resp_type = _detect_response_type(content, func, framework)
+        if resp_type and resp_type in class_index:
+            contract["response"] = {
+                200: {"body_class": resp_type, "fields": class_index[resp_type]},
+            }
+
+        # Detect error responses
+        errors = _detect_error_responses(content, func)
+        if errors:
+            resp = contract.get("response", {})
+            for err in errors:
+                resp[err["status"]] = {"description": err.get("when", "")}
+            contract["response"] = resp
+
+        contracts.append(contract)
+
+    return contracts
+
+
+def _build_class_index(
+    source_dirs: list[Path], framework: str,
+) -> dict[str, list[dict]]:
+    """Build index mapping class/struct names to their field definitions."""
+    index: dict[str, list[dict]] = {}
+
+    py_extensions = {".py"}
+    java_extensions = {".java", ".kt"}
+    ts_extensions = {".ts", ".tsx"}
+    go_extensions = {".go"}
+
+    if framework in ("fastapi", "django", "flask"):
+        extensions = py_extensions
+    elif framework == "spring":
+        extensions = java_extensions
+    elif framework in ("express", "nextjs", "nestjs", "hono", "fastify"):
+        extensions = ts_extensions
+    elif framework in ("gin", "echo", "fiber", "chi", "gorilla", "net-http"):
+        extensions = go_extensions
+    else:
+        extensions = py_extensions | java_extensions | ts_extensions | go_extensions
+
+    for src_file in _iter_files(source_dirs, extensions):
+        content = _read_safe(src_file)
+        if content is None:
+            continue
+
+        if src_file.suffix == ".py":
+            _index_python_classes(content, index)
+        elif src_file.suffix in (".java", ".kt"):
+            _index_java_classes(content, index)
+        elif src_file.suffix in (".ts", ".tsx"):
+            _index_ts_classes(content, index)
+        elif src_file.suffix == ".go":
+            _index_go_structs(content, index)
+
+    return index
+
+
+def _index_python_classes(content: str, index: dict[str, list[dict]]) -> None:
+    """Index Python classes (Pydantic models, dataclasses) into field maps."""
+    # Pydantic BaseModel / dataclass
+    class_pattern = r'class\s+(\w+)\s*\([^)]*(?:BaseModel|BaseSchema|Schema)[^)]*\)\s*:'
+    for match in re.finditer(class_pattern, content):
+        name = match.group(1)
+        body_start = match.end()
+        next_class = re.search(r'\nclass\s+', content[body_start:])
+        body = content[body_start:body_start + next_class.start() if next_class else len(content)]
+
+        fields = []
+        # field_name: Type = Field(...) or field_name: Type
+        field_pattern = r'(\w+)\s*:\s*([\w\[\], |]+)(?:\s*=\s*(.+))?'
+        for fm in re.finditer(field_pattern, body):
+            fname = fm.group(1)
+            ftype = fm.group(2).strip()
+            default_or_field = fm.group(3) or ""
+
+            if fname.startswith("_") or fname in ("model_config", "Config"):
+                continue
+
+            constraints = []
+            if "Field(" in default_or_field:
+                # Extract constraints from Field(min_length=1, max_length=100, ge=0, ...)
+                for c in re.finditer(r'(min_length|max_length|ge|le|gt|lt|regex|pattern)\s*=\s*([^,)]+)', default_or_field):
+                    constraints.append(f"{c.group(1)}={c.group(2).strip()}")
+
+            required = "None" not in ftype and "Optional" not in ftype and "= None" not in default_or_field
+            field_info: dict = {"name": fname, "type": ftype, "required": required}
+            if constraints:
+                field_info["constraints"] = ", ".join(constraints)
+            fields.append(field_info)
+
+        if fields:
+            index[name] = fields
+
+
+def _index_java_classes(content: str, index: dict[str, list[dict]]) -> None:
+    """Index Java DTO/record classes into field maps."""
+    # Java record: public record CreateOrderRequest(String customerId, ...)
+    record_pattern = r'(?:public\s+)?record\s+(\w+)\s*\(([^)]+)\)'
+    for match in re.finditer(record_pattern, content):
+        name = match.group(1)
+        params = match.group(2)
+        fields = []
+        for param in params.split(","):
+            param = param.strip()
+            parts = param.rsplit(None, 1)
+            if len(parts) == 2:
+                ftype, fname = parts
+                constraints = []
+                # Look for validation annotations above
+                above = content[:match.start()]
+                for ann in re.finditer(rf'@(\w+)(?:\(([^)]*)\))?\s*$', above):
+                    ann_name = ann.group(1)
+                    if ann_name in ("NotNull", "NotBlank", "NotEmpty", "Size", "Min", "Max", "Pattern", "Email", "Valid"):
+                        detail = ann.group(2) or ""
+                        constraints.append(f"@{ann_name}({detail})" if detail else f"@{ann_name}")
+                field_info: dict = {"name": fname.strip(), "type": ftype.strip(), "required": True}
+                if constraints:
+                    field_info["constraints"] = ", ".join(constraints)
+                fields.append(field_info)
+        if fields:
+            index[name] = fields
+
+    # Java class with fields
+    class_pattern = r'(?:public\s+)?class\s+(\w+)(?:\s+extends\s+\w+)?(?:\s+implements\s+[\w,\s]+)?\s*\{'
+    for match in re.finditer(class_pattern, content):
+        name = match.group(1)
+        if name in index:
+            continue
+        # Extract fields up to first method or closing brace
+        body_start = match.end()
+        body_end = content.find("}", body_start)
+        if body_end == -1:
+            continue
+        body = content[body_start:body_end]
+
+        fields = []
+        field_pattern = r'(?:@(\w+)(?:\(([^)]*)\))?\s+)*(?:private|protected|public)\s+([\w<>,\s\[\]?]+?)\s+(\w+)\s*[;=]'
+        for fm in re.finditer(field_pattern, body):
+            ftype = fm.group(3).strip()
+            fname = fm.group(4)
+            if ftype in ("static", "final", "transient"):
+                continue
+            # Look for validation annotations in the preceding 200 chars
+            preceding = body[max(0, fm.start() - 200):fm.start()]
+            constraints = []
+            for ann in re.finditer(r'@(NotNull|NotBlank|NotEmpty|Size|Min|Max|Pattern|Email|Valid)(?:\(([^)]*)\))?', preceding):
+                ann_name = ann.group(1)
+                detail = ann.group(2) or ""
+                constraints.append(f"@{ann_name}({detail})" if detail else f"@{ann_name}")
+            required = any("NotNull" in c or "NotBlank" in c or "NotEmpty" in c for c in constraints)
+            field_info = {"name": fname, "type": ftype, "required": required}
+            if constraints:
+                field_info["constraints"] = ", ".join(constraints)
+            fields.append(field_info)
+
+        if fields:
+            index[name] = fields
+
+
+def _index_ts_classes(content: str, index: dict[str, list[dict]]) -> None:
+    """Index TypeScript interfaces/types/classes into field maps."""
+    # interface or type
+    iface_pattern = r'(?:export\s+)?(?:interface|type)\s+(\w+)\s*(?:=\s*)?\{([^}]+)\}'
+    for match in re.finditer(iface_pattern, content):
+        name = match.group(1)
+        body = match.group(2)
+        fields = []
+        for line in body.split("\n"):
+            line = line.strip().rstrip(";").rstrip(",")
+            fm = re.match(r'(\w+)(\??):\s*(.+)', line)
+            if fm:
+                fname = fm.group(1)
+                optional = fm.group(2) == "?"
+                ftype = fm.group(3).strip()
+                fields.append({"name": fname, "type": ftype, "required": not optional})
+        if fields:
+            index[name] = fields
+
+
+def _index_go_structs(content: str, index: dict[str, list[dict]]) -> None:
+    """Index Go structs into field maps."""
+    struct_pattern = r'type\s+(\w+)\s+struct\s*\{'
+    for match in re.finditer(struct_pattern, content):
+        name = match.group(1)
+        brace_start = match.end() - 1
+        depth = 1
+        pos = brace_start + 1
+        while pos < len(content) and depth > 0:
+            if content[pos] == '{':
+                depth += 1
+            elif content[pos] == '}':
+                depth -= 1
+            pos += 1
+        body = content[brace_start + 1:pos - 1]
+
+        fields = []
+        field_pattern = r'(\w+)\s+([\w.*\[\]]+)\s*`([^`]*)`'
+        for fm in re.finditer(field_pattern, body):
+            fname = fm.group(1)
+            ftype = fm.group(2)
+            tags = fm.group(3)
+            if fname in ("Model", "DeletedAt"):
+                continue
+            json_name = re.search(r'json:"(\w+)', tags)
+            display_name = json_name.group(1) if json_name else fname
+            required = "required" in tags or "binding:\"required\"" in tags
+            constraints = []
+            # binding:"required,min=1,max=100"
+            binding = re.search(r'binding:"([^"]+)"', tags)
+            if binding:
+                for part in binding.group(1).split(","):
+                    part = part.strip()
+                    if part and part != "required":
+                        constraints.append(part)
+            validate = re.search(r'validate:"([^"]+)"', tags)
+            if validate:
+                for part in validate.group(1).split(","):
+                    part = part.strip()
+                    if part and part != "required":
+                        constraints.append(part)
+            field_info: dict = {"name": display_name, "type": ftype, "required": required}
+            if constraints:
+                field_info["constraints"] = ", ".join(constraints)
+            fields.append(field_info)
+
+        if fields:
+            index[name] = fields
+
+
+def _detect_auth(content: str, func_name: str, framework: str) -> str:
+    """Detect authentication requirements from annotations/decorators."""
+    if framework == "spring":
+        if "@PreAuthorize" in content or "@Secured" in content:
+            return "role-based"
+        if "SecurityContext" in content or "Authentication" in content:
+            return "bearer token"
+    elif framework == "fastapi":
+        if "Depends(get_current_user)" in content or "Depends(oauth2" in content:
+            return "bearer token"
+        if "HTTPBearer" in content or "OAuth2PasswordBearer" in content:
+            return "bearer token"
+        if "APIKey" in content:
+            return "api-key"
+    elif framework in ("express", "nestjs", "hono", "fastify"):
+        if "@UseGuards(AuthGuard" in content or "@UseGuards(JwtAuthGuard" in content:
+            return "bearer token"
+        if "passport.authenticate" in content or "jwt" in content.lower():
+            return "bearer token"
+    elif framework in ("gin", "echo"):
+        if "AuthMiddleware" in content or "JWTMiddleware" in content:
+            return "bearer token"
+    return ""
+
+
+def _detect_request_type(content: str, func_name: str, framework: str) -> str | None:
+    """Detect the request body type for a handler function."""
+    # Find the function/method definition
+    if framework == "fastapi":
+        # def handler(body: CreateOrderRequest) or def handler(order: OrderCreate)
+        func_match = re.search(rf'def\s+{re.escape(func_name)}\s*\(([^)]+)\)', content)
+        if func_match:
+            params = func_match.group(1)
+            # Look for typed params that aren't Request, Response, Depends, etc.
+            for p in params.split(","):
+                p = p.strip()
+                type_match = re.match(r'\w+\s*:\s*(\w+)', p)
+                if type_match:
+                    ptype = type_match.group(1)
+                    if ptype not in ("Request", "Response", "str", "int", "float", "bool", "None", "Optional", "Query", "Path", "Header", "Cookie"):
+                        return ptype
+    elif framework == "spring":
+        func_match = re.search(rf'{re.escape(func_name)}\s*\([^)]*@RequestBody\s+([\w<>]+)\s+\w+', content)
+        if func_match:
+            return func_match.group(1).split("<")[0]
+    elif framework == "nestjs":
+        func_match = re.search(rf'{re.escape(func_name)}\s*\([^)]*@Body\(\)\s+\w+\s*:\s*(\w+)', content)
+        if func_match:
+            return func_match.group(1)
+    elif framework in ("gin", "echo"):
+        # Look for ShouldBindJSON(&req) where req is typed
+        func_match = re.search(rf'func\s+[^)]*\)\s*{re.escape(func_name)}\(', content)
+        if func_match:
+            body_after = content[func_match.end():]
+            bind_match = re.search(r'(?:ShouldBindJSON|Bind)\(&(\w+)\)', body_after[:500])
+            if bind_match:
+                var_name = bind_match.group(1)
+                type_match = re.search(rf'var\s+{re.escape(var_name)}\s+(\w+)', body_after[:500])
+                if type_match:
+                    return type_match.group(1)
+    return None
+
+
+def _detect_response_type(content: str, func_name: str, framework: str) -> str | None:
+    """Detect the response type for a handler function."""
+    if framework == "fastapi":
+        # response_model=OrderResponse or -> OrderResponse
+        func_match = re.search(rf'response_model\s*=\s*(\w+).*?def\s+{re.escape(func_name)}', content, re.DOTALL)
+        if func_match:
+            return func_match.group(1)
+        # Return type annotation
+        func_match = re.search(rf'def\s+{re.escape(func_name)}\s*\([^)]*\)\s*->\s*(\w+)', content)
+        if func_match:
+            rtype = func_match.group(1)
+            if rtype not in ("None", "Response", "JSONResponse", "dict"):
+                return rtype
+    elif framework == "spring":
+        # ResponseEntity<OrderResponse> or just OrderResponse as return type
+        func_match = re.search(rf'(?:ResponseEntity<)?(\w+)>?\s+{re.escape(func_name)}\s*\(', content)
+        if func_match:
+            rtype = func_match.group(1)
+            if rtype not in ("void", "ResponseEntity", "String", "Object"):
+                return rtype
+    return None
+
+
+def _detect_error_responses(content: str, func_name: str) -> list[dict]:
+    """Detect error response patterns in handler code."""
+    errors: list[dict] = []
+    seen_statuses: set[int] = set()
+
+    # HTTP status codes in exceptions/responses
+    patterns = [
+        (r'status[_.]?code\s*=\s*(\d{3})', None),
+        (r'HttpStatus\.(\w+)', None),
+        (r'raise\s+HTTPException\s*\(\s*status_code\s*=\s*(\d{3})', None),
+        (r'status\((\d{3})\)', None),
+        (r'\.status\((\d{3})\)', None),
+        (r'http\.Status(\w+)', None),
+    ]
+
+    for pattern, _ in patterns:
+        for match in re.finditer(pattern, content):
+            val = match.group(1)
+            # Convert HttpStatus name to code
+            status_map = {
+                "BAD_REQUEST": 400, "UNAUTHORIZED": 401, "FORBIDDEN": 403,
+                "NOT_FOUND": 404, "CONFLICT": 409, "INTERNAL_SERVER_ERROR": 500,
+                "BadRequest": 400, "Unauthorized": 401, "Forbidden": 403,
+                "NotFound": 404, "Conflict": 409, "InternalServerError": 500,
+            }
+            if val in status_map:
+                code = status_map[val]
+            else:
+                try:
+                    code = int(val)
+                except ValueError:
+                    continue
+            if code >= 400 and code not in seen_statuses:
+                seen_statuses.add(code)
+                errors.append({"status": code, "when": _error_reason(code)})
+
+    return errors
+
+
+def _error_reason(code: int) -> str:
+    """Return a generic reason for an HTTP error code."""
+    reasons = {
+        400: "validation fails",
+        401: "not authenticated",
+        403: "not authorized",
+        404: "not found",
+        409: "conflict",
+        422: "unprocessable entity",
+        500: "internal server error",
+    }
+    return reasons.get(code, f"HTTP {code}")
+
+
+def _tags_from_path(path: str) -> list[str]:
+    """Extract tags from an API path (first non-param segment)."""
+    parts = [p for p in path.split("/") if p and not p.startswith("{") and not p.startswith(":")]
+    if len(parts) >= 2:
+        return [parts[1]]  # e.g., /api/orders → "orders"
+    elif parts:
+        return [parts[0]]
+    return []
+
+
+def _write_api_contracts(root: Path, config: dict, contracts: list[dict]) -> None:
+    """Write deep reverse output to specs/domain/api-contracts.yaml (DEEP-REV-001 safe)."""
+    import yaml
+
+    from evospec.core.config import get_paths
+
+    paths = get_paths(config)
+    domain_dir = root / paths["domain"]
+    contracts_path = domain_dir / "api-contracts.yaml"
+
+    # DEEP-REV-001: Don't overwrite existing manually-curated data
+    if contracts_path.exists():
+        existing = yaml.safe_load(contracts_path.read_text()) or {}
+        existing_contracts = existing.get("contracts", [])
+        if existing_contracts:
+            console.print(
+                f"[yellow]⚠ {contracts_path.relative_to(root)} already has "
+                f"{len(existing_contracts)} contract(s). Use --force to overwrite.[/yellow]"
+            )
+            return
+
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    output = {"contracts": contracts}
+    contracts_path.write_text(yaml.dump(output, default_flow_style=False, sort_keys=False))
+    console.print(f"[green]✓[/green] Wrote {len(contracts)} contract(s) to {contracts_path.relative_to(root)}")

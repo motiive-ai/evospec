@@ -20,7 +20,8 @@ def cli() -> None:
 @click.option("--name", prompt="Project name", help="Name of the project.")
 @click.option("--description", default="", help="Short project description.")
 @click.option("--detect", is_flag=True, help="Auto-detect project stack and pre-fill reverse config.")
-def init(name: str, description: str, detect: bool) -> None:
+@click.option("--specs-dir", default=None, help="Custom spec folder path (e.g., 'evospec' or '.evospec'). Sets paths.specs and paths.domain.")
+def init(name: str, description: str, detect: bool, specs_dir: str | None) -> None:
     """Initialize EvoSpec in the current project."""
     from evospec.core.init import init_project
 
@@ -30,7 +31,7 @@ def init(name: str, description: str, detect: bool) -> None:
 
         detection = detect_project_stack(Path.cwd())
 
-    init_project(name=name, description=description, detection=detection)
+    init_project(name=name, description=description, detection=detection, specs_dir=specs_dir)
 
 
 @cli.command()
@@ -95,6 +96,106 @@ def check(strict: bool, run_fitness: bool) -> None:
             raise SystemExit(1)
 
 
+@cli.command()
+@click.option("--since", default=None, help="Git ref (commit, tag, branch) to compare from.")
+@click.option("--generate", is_flag=True, help="Create draft change specs from detected drift.")
+@click.option("--ci", is_flag=True, help="Machine-readable JSON output for CI pipelines.")
+def sync(since: str | None, generate: bool, ci: bool) -> None:
+    """Detect spec drift by analyzing git diffs against domain specs."""
+    from evospec.core.sync import run_sync
+
+    run_sync(since=since, generate=generate, ci=ci)
+
+
+@cli.command()
+@click.option("--strict", is_flag=True, help="Exit non-zero on failures (for CI gates).")
+@click.option("--format", "output_format", type=click.Choice(["text", "json", "markdown"]),
+              default="text", help="Output format.")
+def verify(strict: bool, output_format: str) -> None:
+    """Verify spec accuracy against implementation code."""
+    from evospec.core.verify import run_verify
+
+    run_verify(strict=strict, output_format=output_format)
+
+
+@cli.command()
+@click.option("--from-history", "from_history", is_flag=True, required=True,
+              help="Analyze git history to detect feature clusters and generate retroactive specs.")
+@click.option("--since", default=None, help="Git ref (commit, tag, branch) to start analysis from.")
+@click.option("--min-cluster-size", default=2, type=int, help="Minimum files per cluster (default: 2).")
+@click.option("--max-clusters", default=20, type=int, help="Maximum clusters to generate (default: 20).")
+def capture(from_history: bool, since: str | None, min_cluster_size: int, max_clusters: int) -> None:
+    """Generate retroactive specs from git history (co-change clustering).
+
+    This command analyzes git commit history to detect feature clusters and
+    generates spec.yaml + discovery-spec.md for each cluster.
+
+    \b
+    Note: This is different from /evospec.capture (AI workflow), which scans
+    the current codebase to generate implementation-spec.md for a single spec.
+
+    \b
+      CLI capture --from-history:  git history → multiple spec stubs
+      /evospec.capture workflow:   live code → implementation-spec.md
+    """
+    if from_history:
+        from evospec.core.capture import run_capture_from_history
+
+        run_capture_from_history(
+            since=since,
+            min_cluster_size=min_cluster_size,
+            max_clusters=max_clusters,
+        )
+
+
+@cli.group()
+def deprecate() -> None:
+    """Mark API contracts or entities as deprecated."""
+
+
+@deprecate.command("contract")
+@click.argument("endpoint")
+@click.option("--replacement", default=None, help="Replacement endpoint path.")
+@click.option("--sunset", default=None, help="ISO date when the endpoint will be removed.")
+def deprecate_contract(endpoint: str, replacement: str | None, sunset: str | None) -> None:
+    """Deprecate an API contract endpoint.
+
+    ENDPOINT is the endpoint path to deprecate (e.g., 'GET /api/orders/all').
+    """
+    from evospec.core.deprecate import deprecate_item
+
+    deprecate_item(kind="contract", name=endpoint, replacement=replacement, sunset_date=sunset)
+
+
+@deprecate.command("entity")
+@click.argument("name")
+@click.option("--replacement", default=None, help="Replacement entity name.")
+def deprecate_entity(name: str, replacement: str | None) -> None:
+    """Deprecate a domain entity.
+
+    NAME is the entity name to deprecate (e.g., 'OrderV1').
+    """
+    from evospec.core.deprecate import deprecate_item
+
+    deprecate_item(kind="entity", name=name, replacement=replacement)
+
+
+@cli.command()
+@click.option("--id", "spec_id", default=None, help="Archive a specific spec by id.")
+@click.option("--status", "status_filter", default=None,
+              help="Archive all specs with this status (e.g., completed, abandoned).")
+@click.option("--dry-run", is_flag=True, help="Show what would be archived without moving.")
+def archive(spec_id: str | None, status_filter: str | None, dry_run: bool) -> None:
+    """Archive completed/abandoned specs to specs/archive/.
+
+    By default archives all completed, abandoned, and superseded specs.
+    Archived specs are hidden from MCP tools but remain accessible.
+    """
+    from evospec.core.archive import run_archive
+
+    run_archive(spec_id=spec_id, status_filter=status_filter, dry_run=dry_run)
+
+
 @cli.group()
 def reverse() -> None:
     """Reverse-engineer domain contracts from code."""
@@ -111,20 +212,24 @@ def reverse() -> None:
     ]),
 )
 @click.option("--source", default=None, help="Source directory to scan.")
-def reverse_api(framework: str | None, source: str | None) -> None:
+@click.option("--deep", is_flag=True, help="Deep extraction: DTO fields, validation, auth, error responses.")
+@click.option("--write", is_flag=True, help="Write deep output to specs/domain/api-contracts.yaml (requires --deep).")
+def reverse_api(framework: str | None, source: str | None, deep: bool, write: bool) -> None:
     """Reverse-engineer API endpoints into spec stubs."""
     from evospec.reverse.api import reverse_engineer_api
 
-    reverse_engineer_api(framework=framework, source=source)
+    reverse_engineer_api(framework=framework, source=source, deep=deep, write=write)
 
 
 @reverse.command("db")
 @click.option("--source", default=None, help="Migrations or models directory.")
-def reverse_db(source: str | None) -> None:
+@click.option("--deep", is_flag=True, help="Deep extraction: invariant detection, state machine detection.")
+@click.option("--write", is_flag=True, help="Write deep output to specs/domain/ files (requires --deep).")
+def reverse_db(source: str | None, deep: bool, write: bool) -> None:
     """Reverse-engineer database schema into domain contract stubs."""
     from evospec.reverse.db import reverse_engineer_db
 
-    reverse_engineer_db(source=source)
+    reverse_engineer_db(source=source, deep=deep, write=write)
 
 
 @reverse.command("cli")
@@ -138,7 +243,9 @@ def reverse_cli(source: str | None) -> None:
 
 @reverse.command("deps")
 @click.option("--source", default=None, help="Source directory to scan for API calls.")
-def reverse_deps(source: str | None) -> None:
+@click.option("--deep", is_flag=True, help="Deep extraction: payload schemas, message queues, storage ops.")
+@click.option("--write", is_flag=True, help="Write deep output to specs/domain/ files (requires --deep).")
+def reverse_deps(source: str | None, deep: bool, write: bool) -> None:
     """Reverse-engineer cross-system API dependencies from source code.
 
     Scans source files for HTTP calls (fetch, axios, requests, etc.) and maps
@@ -146,23 +253,25 @@ def reverse_deps(source: str | None) -> None:
     """
     from evospec.reverse.deps import reverse_engineer_deps
 
-    reverse_engineer_deps(source=source)
+    reverse_engineer_deps(source=source, deep=deep, write=write)
 
 
 @cli.command()
-def render() -> None:
+@click.option("--include-archived", is_flag=True, help="Include archived specs in the rendered output.")
+def render(include_archived: bool) -> None:
     """Render all specs into a consolidated markdown document."""
     from evospec.core.render import render_specs
 
-    render_specs()
+    render_specs(include_archived=include_archived)
 
 
 @cli.command()
-def status() -> None:
+@click.option("--include-archived", is_flag=True, help="Include archived specs in the output.")
+def status(include_archived: bool) -> None:
     """Show the status of all change specs."""
     from evospec.core.status import show_status
 
-    show_status()
+    show_status(include_archived=include_archived)
 
 
 @cli.group()
@@ -220,6 +329,60 @@ def learn(spec_path: str | None) -> None:
     from evospec.core.discovery import record_learning
 
     record_learning(spec_path=spec_path)
+
+
+@cli.command()
+def contract() -> None:
+    """Create a domain contract for a change spec.
+
+    This is an AI agent workflow. Use one of:
+
+    \b
+      Windsurf:    /evospec.contract
+      Claude Code: reads CLAUDE.md (section: contract)
+      Cursor:      @evospec-contract
+    """
+    click.echo("evospec contract is an AI agent workflow.\n")
+    click.echo("Use your IDE's AI agent with one of these commands:")
+    click.echo("  Windsurf:    /evospec.contract")
+    click.echo("  Claude Code: reads CLAUDE.md (section: contract)")
+    click.echo("  Cursor:      @evospec-contract")
+
+
+@cli.command()
+def tasks() -> None:
+    """Generate implementation tasks from a spec.
+
+    This is an AI agent workflow. Use one of:
+
+    \b
+      Windsurf:    /evospec.tasks
+      Claude Code: reads CLAUDE.md (section: tasks)
+      Cursor:      @evospec-tasks
+    """
+    click.echo("evospec tasks is an AI agent workflow.\n")
+    click.echo("Use your IDE's AI agent with one of these commands:")
+    click.echo("  Windsurf:    /evospec.tasks")
+    click.echo("  Claude Code: reads CLAUDE.md (section: tasks)")
+    click.echo("  Cursor:      @evospec-tasks")
+
+
+@cli.command()
+def implement() -> None:
+    """Execute implementation tasks from tasks.md.
+
+    This is an AI agent workflow. Use one of:
+
+    \b
+      Windsurf:    /evospec.implement
+      Claude Code: reads CLAUDE.md (section: implement)
+      Cursor:      @evospec-implement
+    """
+    click.echo("evospec implement is an AI agent workflow.\n")
+    click.echo("Use your IDE's AI agent with one of these commands:")
+    click.echo("  Windsurf:    /evospec.implement")
+    click.echo("  Claude Code: reads CLAUDE.md (section: implement)")
+    click.echo("  Cursor:      @evospec-implement")
 
 
 @cli.command()

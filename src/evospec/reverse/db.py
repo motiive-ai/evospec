@@ -36,12 +36,20 @@ def _extract_body(content: str, start: int) -> str:
     return content[start:start + next_class.start() if next_class else len(content)]
 
 
-def reverse_engineer_db(source: str | None = None) -> None:
+def reverse_engineer_db(
+    source: str | None = None,
+    deep: bool = False,
+    write: bool = False,
+) -> None:
     """Scan database models or migrations to extract entity information."""
     root = find_project_root()
     if root is None:
         console.print("[red]✗ No evospec.yaml found. Run `evospec init` first.[/red]")
         return
+
+    if write and not deep:
+        console.print("[yellow]⚠ --write requires --deep. Running shallow scan.[/yellow]")
+        write = False
 
     config = load_config(root)
 
@@ -129,6 +137,47 @@ def reverse_engineer_db(source: str | None = None) -> None:
     registry_lines = _generate_entity_registry(entities, relationships)
     for line in registry_lines:
         console.print(f"[dim]{line}[/dim]")
+
+    # Deep extraction: invariant detection + state machine detection
+    if deep:
+        console.print(f"\n[bold magenta]Deep extraction:[/bold magenta]")
+
+        # Suggested invariants
+        suggested = _suggest_invariants(entities, source_dirs, framework)
+        if suggested:
+            console.print(f"\n  [bold]Suggested invariants ({len(suggested)}):[/bold]\n")
+            for inv in suggested:
+                conf = inv.get("confidence", "medium")
+                conf_color = {"high": "green", "medium": "yellow", "low": "dim"}.get(conf, "dim")
+                console.print(
+                    f"    [{conf_color}]{conf:6s}[/{conf_color}] "
+                    f"[bold]{inv['entity']}[/bold]: {inv['rule']}"
+                )
+                console.print(f"           [dim]source: {inv.get('source', '?')}[/dim]")
+        else:
+            console.print("  [yellow]⚠ No invariants suggested.[/yellow]")
+
+        # State machine detection
+        state_machines = _detect_state_machines(entities, source_dirs)
+        if state_machines:
+            console.print(f"\n  [bold]State machines ({len(state_machines)}):[/bold]\n")
+            for sm in state_machines:
+                console.print(
+                    f"    [bold cyan]{sm['entity']}.{sm['field']}[/bold cyan] "
+                    f"[dim]({len(sm.get('states', []))} states, "
+                    f"{len(sm.get('transitions', []))} transitions)[/dim]"
+                )
+                for t in sm.get("transitions", []):
+                    to_str = ", ".join(t["to"]) if isinstance(t.get("to"), list) else str(t.get("to", "?"))
+                    console.print(f"      {t.get('from', '?')} → [{to_str}]")
+                for f in sm.get("forbidden", []):
+                    console.print(f"      [red]✗[/red] {f.get('from', '?')} → {f.get('to', '*')} ({f.get('reason', '')})")
+        else:
+            console.print("  [dim]No state machines detected.[/dim]")
+
+        # Write output
+        if write:
+            _write_deep_db_output(root, config, suggested, state_machines)
 
     console.print(
         f"\n[dim]Use these findings to populate domain-contract.md entities and "
@@ -703,3 +752,330 @@ def _detect_relationships(entities: list[dict]) -> list[dict]:
                 })
 
     return relationships
+
+
+# ---------------------------------------------------------------------------
+# Deep extraction — invariant detection + state machine detection
+# ---------------------------------------------------------------------------
+
+def _suggest_invariants(
+    entities: list[dict], source_dirs: list[Path], framework: str,
+) -> list[dict]:
+    """Suggest invariants from entity schemas and source code (DEEP-REV-002).
+
+    Each suggestion has a confidence level (high/medium/low) and source reference.
+    """
+    suggested: list[dict] = []
+    inv_counter = 0
+
+    for entity in entities:
+        name = entity.get("name", "?")
+        fields = entity.get("fields", [])
+        module = entity.get("module", "?")
+
+        for field in fields:
+            fname = field.get("name", "?")
+            ftype = field.get("type", "?")
+            nullable = field.get("nullable", True)
+
+            # Non-nullable fields → required invariant (high confidence)
+            if not nullable and fname not in ("id",):
+                inv_counter += 1
+                suggested.append({
+                    "id": f"INV-{name.upper()}-{inv_counter:03d}",
+                    "entity": name,
+                    "rule": f"{fname} MUST NOT be null",
+                    "source": f"@Column(nullable=false) or NOT NULL constraint",
+                    "confidence": "high",
+                    "enforcement": "database-constraint",
+                })
+
+            # Unique constraints → uniqueness invariant (high confidence)
+            if "unique" in str(field).lower():
+                inv_counter += 1
+                suggested.append({
+                    "id": f"INV-{name.upper()}-{inv_counter:03d}",
+                    "entity": name,
+                    "rule": f"{fname} MUST be unique",
+                    "source": "@Column(unique=true) or UNIQUE constraint",
+                    "confidence": "high",
+                    "enforcement": "database-constraint",
+                })
+
+            # Enum types → valid values invariant (high confidence)
+            ftype_lower = ftype.lower()
+            if "enum" in ftype_lower or ftype_lower in ("orderstatus", "status", "state", "role", "type"):
+                inv_counter += 1
+                suggested.append({
+                    "id": f"INV-{name.upper()}-{inv_counter:03d}",
+                    "entity": name,
+                    "rule": f"{fname} MUST be one of the defined {ftype} values",
+                    "source": f"Enum type: {ftype}",
+                    "confidence": "high",
+                    "enforcement": "domain-logic",
+                })
+
+        # FK relationships → cardinality invariants (high confidence)
+        for field in fields:
+            fname = field.get("name", "?")
+            if (fname.endswith("_id") or fname.endswith("Id")) and fname != "id":
+                if not field.get("nullable", True):
+                    ref_name = fname.replace("_id", "").replace("Id", "").capitalize()
+                    inv_counter += 1
+                    suggested.append({
+                        "id": f"INV-{name.upper()}-{inv_counter:03d}",
+                        "entity": name,
+                        "rule": f"{name} MUST reference exactly one {ref_name}",
+                        "source": f"FK {fname} NOT NULL",
+                        "confidence": "high",
+                        "enforcement": "database-constraint",
+                    })
+
+    # Scan source code for validation annotations (medium confidence)
+    for src_file in _iter_files(source_dirs, {".py", ".java", ".kt", ".go", ".ts"}):
+        content = _read_safe(src_file)
+        if content is None:
+            continue
+
+        # Java/Kotlin: @Size, @Min, @Max, @Pattern
+        for match in re.finditer(r'@(Size|Min|Max|Pattern)\(([^)]+)\)\s+(?:private\s+)?[\w<>]+\s+(\w+)', content):
+            ann = match.group(1)
+            params = match.group(2)
+            field_name = match.group(3)
+            # Find enclosing class
+            class_match = re.search(r'class\s+(\w+)', content[:match.start()])
+            entity_name = class_match.group(1) if class_match else "Unknown"
+            inv_counter += 1
+            suggested.append({
+                "id": f"INV-{entity_name.upper()}-{inv_counter:03d}",
+                "entity": entity_name,
+                "rule": f"{field_name} constrained by @{ann}({params})",
+                "source": f"@{ann}({params}) in {src_file.name}",
+                "confidence": "medium",
+                "enforcement": "api-validation",
+            })
+
+        # Python: Field(min_length=..., max_length=..., ge=..., le=...)
+        for match in re.finditer(r'(\w+)\s*:\s*\w+\s*=\s*Field\(([^)]*(?:min_length|max_length|ge|le|gt|lt)[^)]*)\)', content):
+            field_name = match.group(1)
+            params = match.group(2)
+            class_match = re.search(r'class\s+(\w+)', content[:match.start()])
+            entity_name = class_match.group(1) if class_match else "Unknown"
+            inv_counter += 1
+            suggested.append({
+                "id": f"INV-{entity_name.upper()}-{inv_counter:03d}",
+                "entity": entity_name,
+                "rule": f"{field_name} constrained by Field({params.strip()})",
+                "source": f"Pydantic Field() in {src_file.name}",
+                "confidence": "medium",
+                "enforcement": "api-validation",
+            })
+
+    return suggested
+
+
+def _detect_state_machines(
+    entities: list[dict], source_dirs: list[Path],
+) -> list[dict]:
+    """Detect state machines from enum-typed status/state fields."""
+    machines: list[dict] = []
+
+    for entity in entities:
+        name = entity.get("name", "?")
+        fields = entity.get("fields", [])
+
+        for field in fields:
+            fname = field.get("name", "?")
+            ftype = field.get("type", "?")
+            fname_lower = fname.lower()
+
+            # Detect status/state fields
+            is_status = any(kw in fname_lower for kw in ("status", "state", "phase", "stage"))
+            is_enum = "enum" in ftype.lower() or ftype[0].isupper()
+
+            if not (is_status and is_enum):
+                continue
+
+            # Try to find enum values from source code
+            enum_values = _find_enum_values(ftype, source_dirs)
+            if not enum_values:
+                continue
+
+            # Try to detect transitions from source code
+            transitions, forbidden = _find_transitions(name, fname, enum_values, source_dirs)
+
+            machines.append({
+                "entity": name,
+                "field": fname,
+                "type": ftype,
+                "states": enum_values,
+                "transitions": transitions,
+                "forbidden": forbidden,
+            })
+
+    return machines
+
+
+def _find_enum_values(enum_type: str, source_dirs: list[Path]) -> list[str]:
+    """Find enum values from source code."""
+    values: list[str] = []
+
+    for src_file in _iter_files(source_dirs, {".py", ".java", ".kt", ".go", ".ts", ".prisma"}):
+        content = _read_safe(src_file)
+        if content is None:
+            continue
+
+        # Python: class OrderStatus(str, Enum): DRAFT = "draft" ...
+        py_match = re.search(rf'class\s+{re.escape(enum_type)}\s*\([^)]*(?:Enum|str)[^)]*\)\s*:', content)
+        if py_match:
+            body_start = py_match.end()
+            next_class = re.search(r'\nclass\s+', content[body_start:])
+            body = content[body_start:body_start + next_class.start() if next_class else len(content)]
+            for vm in re.finditer(r'(\w+)\s*=\s*["\']?(\w+)["\']?', body):
+                val = vm.group(1)
+                if val.isupper() or val[0].isupper():
+                    values.append(val)
+            if values:
+                return values
+
+        # Java: enum OrderStatus { DRAFT, CONFIRMED, ... }
+        java_match = re.search(rf'enum\s+{re.escape(enum_type)}\s*\{{([^}}]+)\}}', content)
+        if java_match:
+            body = java_match.group(1)
+            for val in re.findall(r'(\w+)\s*(?:[,;(]|$)', body):
+                if val.isupper() or val[0].isupper():
+                    values.append(val)
+            if values:
+                return values
+
+        # Go: const (DRAFT Status = iota; ...)
+        go_match = re.search(rf'type\s+{re.escape(enum_type)}\s+\w+', content)
+        if go_match:
+            const_block = re.search(r'const\s*\(([^)]+)\)', content[go_match.end():go_match.end() + 500])
+            if const_block:
+                for val in re.findall(r'(\w+)\s+' + re.escape(enum_type), const_block.group(1)):
+                    values.append(val)
+                if not values:
+                    for val in re.findall(r'(\w+)\s*(?:=|' + re.escape(enum_type) + r')', const_block.group(1)):
+                        if val not in ("iota",):
+                            values.append(val)
+            if values:
+                return values
+
+        # TypeScript: enum OrderStatus { Draft = "DRAFT", ... }
+        ts_match = re.search(rf'enum\s+{re.escape(enum_type)}\s*\{{([^}}]+)\}}', content)
+        if ts_match:
+            body = ts_match.group(1)
+            for val in re.findall(r'(\w+)\s*(?:=|,|$)', body):
+                values.append(val)
+            if values:
+                return values
+
+    return values
+
+
+def _find_transitions(
+    entity_name: str, field_name: str, states: list[str], source_dirs: list[Path],
+) -> tuple[list[dict], list[dict]]:
+    """Analyze source code for state transition patterns."""
+    transitions: list[dict] = []
+    forbidden: list[dict] = []
+    seen_from: dict[str, set[str]] = {}
+
+    for src_file in _iter_files(source_dirs, {".py", ".java", ".kt", ".go", ".ts"}):
+        content = _read_safe(src_file)
+        if content is None:
+            continue
+
+        # Look for patterns like: entity.status = NewStatus or setStatus(NewStatus)
+        for state in states:
+            # Direct assignment: .status = Status.CONFIRMED or .status = "CONFIRMED"
+            assign_pattern = rf'\.{re.escape(field_name)}\s*=\s*["\']?(?:\w+\.)?{re.escape(state)}["\']?'
+            for match in re.finditer(assign_pattern, content, re.IGNORECASE):
+                # Try to find what the old state was (check condition above)
+                context_before = content[max(0, match.start() - 300):match.start()]
+                for old_state in states:
+                    if re.search(rf'\.{re.escape(field_name)}\s*==?\s*["\']?(?:\w+\.)?{re.escape(old_state)}["\']?', context_before, re.IGNORECASE):
+                        seen_from.setdefault(old_state, set()).add(state)
+
+    # Build transition list
+    for from_state, to_states in seen_from.items():
+        transitions.append({
+            "from": from_state,
+            "to": sorted(to_states),
+        })
+
+    # Infer forbidden: terminal states (no outgoing edges)
+    all_from = set(seen_from.keys())
+    all_to = set()
+    for tos in seen_from.values():
+        all_to |= tos
+
+    terminal = all_to - all_from
+    for state in terminal:
+        if state in [s for s in states]:
+            forbidden.append({
+                "from": state,
+                "to": "*",
+                "reason": "terminal state (no outgoing transitions found)",
+            })
+
+    return transitions, forbidden
+
+
+def _write_deep_db_output(
+    root: Path, config: dict,
+    suggested: list[dict], state_machines: list[dict],
+) -> None:
+    """Write deep reverse db output to YAML files."""
+    import yaml
+    from evospec.core.config import get_paths
+
+    paths = get_paths(config)
+    domain_dir = root / paths["domain"]
+    domain_dir.mkdir(parents=True, exist_ok=True)
+
+    if suggested:
+        inv_path = domain_dir / "suggested-invariants.yaml"
+        # DEEP-REV-001: Don't overwrite
+        if inv_path.exists():
+            existing = yaml.safe_load(inv_path.read_text()) or {}
+            if existing.get("suggested_invariants"):
+                console.print(
+                    f"[yellow]⚠ {inv_path.relative_to(root)} already exists. "
+                    f"Use --force to overwrite.[/yellow]"
+                )
+            else:
+                inv_path.write_text(yaml.dump(
+                    {"suggested_invariants": suggested},
+                    default_flow_style=False, sort_keys=False,
+                ))
+                console.print(f"[green]✓[/green] Wrote {len(suggested)} suggested invariant(s) to {inv_path.relative_to(root)}")
+        else:
+            inv_path.write_text(yaml.dump(
+                {"suggested_invariants": suggested},
+                default_flow_style=False, sort_keys=False,
+            ))
+            console.print(f"[green]✓[/green] Wrote {len(suggested)} suggested invariant(s) to {inv_path.relative_to(root)}")
+
+    if state_machines:
+        sm_path = domain_dir / "state-machines.yaml"
+        if sm_path.exists():
+            existing = yaml.safe_load(sm_path.read_text()) or {}
+            if existing.get("state_machines"):
+                console.print(
+                    f"[yellow]⚠ {sm_path.relative_to(root)} already exists. "
+                    f"Use --force to overwrite.[/yellow]"
+                )
+            else:
+                sm_path.write_text(yaml.dump(
+                    {"state_machines": state_machines},
+                    default_flow_style=False, sort_keys=False,
+                ))
+                console.print(f"[green]✓[/green] Wrote {len(state_machines)} state machine(s) to {sm_path.relative_to(root)}")
+        else:
+            sm_path.write_text(yaml.dump(
+                {"state_machines": state_machines},
+                default_flow_style=False, sort_keys=False,
+            ))
+            console.print(f"[green]✓[/green] Wrote {len(state_machines)} state machine(s) to {sm_path.relative_to(root)}")

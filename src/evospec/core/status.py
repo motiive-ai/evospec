@@ -27,7 +27,7 @@ STATUS_COLORS = {
 }
 
 
-def show_status() -> None:
+def show_status(include_archived: bool = False) -> None:
     """Display a summary table of all change specs."""
     root = find_project_root()
     if root is None:
@@ -42,12 +42,25 @@ def show_status() -> None:
         console.print("[yellow]No specs directory found.[/yellow]")
         return
 
-    spec_dirs = sorted(
-        [d for d in specs_root.iterdir() if d.is_dir() and (d / "spec.yaml").exists()]
-    )
+    # Collect spec dirs from changes/ and optionally archive/
+    scan_dirs: list[tuple[Path, bool]] = []  # (dir, is_archived)
+    for d in sorted(specs_root.iterdir()):
+        if d.is_dir() and (d / "spec.yaml").exists():
+            scan_dirs.append((d, False))
 
-    if not spec_dirs:
+    archive_root = root / "specs" / "archive"
+    archived_count = 0
+    if archive_root.exists():
+        for d in sorted(archive_root.iterdir()):
+            if d.is_dir() and (d / "spec.yaml").exists():
+                archived_count += 1
+                if include_archived:
+                    scan_dirs.append((d, True))
+
+    if not scan_dirs:
         console.print("[yellow]No specs found. Run `evospec new` to create one.[/yellow]")
+        if archived_count > 0:
+            console.print(f"[dim]({archived_count} archived spec(s) hidden — use --include-archived to show)[/dim]")
         return
 
     table = Table(title="EvoSpec — Change Specifications")
@@ -59,12 +72,14 @@ def show_status() -> None:
     table.add_column("Owner", style="dim")
     table.add_column("Artifacts", style="dim")
 
-    for spec_dir in spec_dirs:
+    for spec_dir, is_archived in scan_dirs:
         with open(spec_dir / "spec.yaml") as f:
             spec = yaml.safe_load(f) or {}
 
         spec_id = spec.get("id", spec_dir.name)
         title = spec.get("title", "Untitled")
+        if is_archived:
+            title = f"[dim]{title} (archived)[/dim]"
         zone = spec.get("zone", "?")
         status = spec.get("status", "?")
         risk = spec.get("classification", {}).get("risk_level", "—")
@@ -108,3 +123,5 @@ def show_status() -> None:
     console.print(table)
     console.print()
     console.print("[dim]Artifacts: D=Discovery Spec, C=Domain Contract, A=ADRs, I=Invariants, F=Fitness Functions[/dim]")
+    if not include_archived and archived_count > 0:
+        console.print(f"[dim]{archived_count} archived spec(s) hidden — use --include-archived to show[/dim]")

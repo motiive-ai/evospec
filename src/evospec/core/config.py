@@ -27,6 +27,9 @@ DOMAIN_FILES = {
     "entities.yaml": ("domain", "entities"),
     "contexts.yaml": ("bounded_contexts",),
     "features.yaml": ("features",),
+    "skills.yaml": ("skills",),
+    "api-contracts.yaml": ("api_contracts",),
+    "file-schemas.yaml": ("file_schemas",),
 }
 
 
@@ -173,3 +176,21 @@ def get_paths(config: dict[str, Any]) -> dict[str, str]:
         "domain": paths.get("domain", "specs/domain"),
         "checks": paths.get("checks", "specs/checks"),
     }
+
+
+def load_skills(project_root: Path | None = None) -> list[dict[str, Any]]:
+    """Load implementation skills from specs/domain/skills.yaml.
+
+    Returns a list of skill dicts, each with 'category' and 'rules' keys.
+    Returns empty list if skills.yaml doesn't exist or has no skills.
+    """
+    root = project_root or find_project_root()
+    if root is None:
+        return []
+    config = load_config(root)
+    skills_data = config.get("skills", {})
+    if isinstance(skills_data, dict):
+        return skills_data.get("skills", [])
+    if isinstance(skills_data, list):
+        return skills_data
+    return []

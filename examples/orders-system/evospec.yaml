@@ -1,0 +1,32 @@
+# EvoSpec Configuration — Orders System Example
+#
+# Demonstrates how EvoSpec helps external consumers understand a domain:
+# - Domain entities (Order, Item, Category)
+# - Cross-category invariant (chemical + food cannot coexist in same order)
+# - API contracts & file schemas for integration
+# - Glossary for ubiquitous language
+#
+# An external developer or data analyst can use MCP tools + Skills to:
+# 1. Explore entities: evospec:get_entities()
+# 2. Understand rules: evospec:get_invariants()
+# 3. Parse API responses: evospec:parse_contract_file("order-response.json")
+# 4. Check impact before building: evospec:check_invariant_impact(...)
+# 5. Get integration context: evospec:get_consumer_context("analyze orders by category")
+
+project:
+  name: "orders-system"
+  description: "Order management system with category-based item restrictions"
+
+schema:
+  version: "1.0.0"
+
+paths:
+  specs: "specs/changes"
+  domain: "specs/domain"
+  adrs: "docs/adr"
+  templates: "specs/templates"
+
+reverse:
+  source_dirs:
+    - "src"
+  framework: ""

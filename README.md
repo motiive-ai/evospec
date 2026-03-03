@@ -143,11 +143,28 @@ evospec check
 
 # Reverse-engineer domain contracts from code
 evospec reverse api --framework fastapi
+evospec reverse db --framework sqlalchemy
+evospec reverse api --framework fastapi --deep  # schema extraction + invariant detection
+
+# Detect spec drift (what changed in code but not in specs?)
+evospec sync --since HEAD~10
+evospec sync --generate  # auto-create draft specs for detected drift
+evospec sync --ci         # JSON output for CI pipelines
+
+# Verify spec accuracy against implementation
+evospec verify
+evospec verify --strict   # exit non-zero if score below threshold (CI gate)
+evospec verify --format markdown
+
+# Generate retroactive specs from git history
+evospec capture --from-history
+evospec capture --from-history --since v1.0 --min-cluster-size 3
 ```
 
 > **See [`examples/`](examples/) for worked projects:**
 > - [`evospec-structure/`](examples/evospec-structure/) — complete EvoSpec project structure with core + edge specs, domain glossary, context map, ADRs, and fitness functions
 > - [`multi-system-ux-discovery/`](examples/multi-system-ux-discovery/) — two backends (Java/Spring Boot + Python/FastAPI) + UX prototype (React/TS) with cross-spec invariant checking
+> - [`orders-system/`](examples/orders-system/) — domain exploration with MCP consumer discovery, API contracts, file schemas, and implementation skills
 
 ## Project Structure (after `evospec init`)
 
@@ -279,14 +296,58 @@ To generate for a single platform: `evospec generate agents --platform cursor`
 
 ### MCP Server (Any Agent)
 
-EvoSpec exposes a **Model Context Protocol server** for programmatic access:
+EvoSpec exposes a **Model Context Protocol server** for programmatic access.
+
+#### Installation & Setup
 
 ```bash
-# Start the MCP server
+# Install globally via pipx
+pipx install evospec
+
+# The MCP server is now available as:
 evospec serve
-# Or directly
+# or directly:
 evospec-mcp
 ```
+
+#### Connecting to Your AI Tool
+
+Add to your MCP configuration file:
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json` in your project):
+```json
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+**Windsurf** (`~/.codeium/windsurf/mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "evospec": {
+      "command": "evospec-mcp"
+    }
+  }
+}
+```
+
+Once connected, the agent should read `evospec://guide` for a full walkthrough of available tools and resources.
 
 **Tools** agents can call:
 
@@ -304,8 +365,29 @@ evospec-mcp
 | `record_experiment(path, ...)` | Log results, update assumption, log learning |
 | `update_assumption(path, id, ...)` | Update assumption status or pivot direction |
 | `run_fitness_functions(path?)` | Execute fitness function tests |
+| `get_entities(context?, upstream?)` | Get entity registry, optionally filtered |
+| `get_invariants(context?)` | Get all invariants, optionally by context |
+| `get_api_contract(endpoint?, tag?)` | Get API contracts from api-contracts.yaml |
+| `get_file_schema(name?, fmt?)` | Get file schemas from file-schemas.yaml |
+| `get_consumer_context(intent)` | Combined context for external consumers |
+| `get_upstream_apis(upstream?)` | API endpoints from upstream services |
+| `parse_contract_file(file_path)` | Parse OpenAPI/JSON Schema files into entities |
+| `check_drift(since?)` | Detect spec drift from git changes |
+| `verify_spec(strict?)` | Verify spec accuracy against code (5 levels) |
 
-**Resources**: `evospec://bootstrap` (works pre-init), `evospec://config`, `evospec://glossary`, `evospec://context-map`, `evospec://invariants`, `evospec://entities`
+**Resources**:
+
+| Resource | Description |
+|----------|-------------|
+| `evospec://guide` | **Start here** — comprehensive agent guide with journey, tools, concepts |
+| `evospec://bootstrap` | AI bootstrap prompt (works pre-init) |
+| `evospec://project` | Lean project metadata |
+| `evospec://glossary` | Domain glossary (ubiquitous language) |
+| `evospec://context-map` | Bounded context relationships |
+| `evospec://skills` | Project-specific implementation skills |
+| `evospec://api-catalog` | Browsable API endpoint catalog |
+| `evospec://drift-report` | Current spec drift analysis |
+| `evospec://verification` | Spec verification report |
 
 Any MCP-compatible agent (Claude Code, Cursor, custom agents) can connect to the server and use these tools directly.
 
@@ -375,6 +457,120 @@ Pivots increment the **iteration counter**. Kill deadlines are enforced. When al
 ### The Bridge: Discovery → Core
 
 When an edge assumption is validated with high confidence, it becomes a **promotion candidate**. Run `/evospec.contract` to codify it as an invariant with fitness functions — this is how knowledge flows from Mystery → Algorithm.
+
+## Spec Drift Detection
+
+Code evolves. Specs don't always keep up. `evospec sync` detects the gap:
+
+```bash
+# What changed in code that isn't reflected in specs?
+evospec sync
+
+# Analyze only recent changes
+evospec sync --since HEAD~20
+
+# Auto-generate draft specs for detected drift
+evospec sync --generate
+
+# CI-friendly JSON output
+evospec sync --ci
+```
+
+**What it detects:**
+- **Entity field changes** — new/modified/removed fields in model classes (Python, Java, Go, TS)
+- **API endpoint changes** — new/removed routes in FastAPI, Express, Spring Boot, etc.
+- **Invariant impact** — changes touching files near invariant enforcement code
+
+**Drift score**: 0–100% (0% = specs perfectly match code, 100% = massive untracked drift). Use `--ci` to fail CI pipelines when drift exceeds a threshold.
+
+## Spec Verification
+
+`evospec verify` goes deeper — it checks whether your specs are *accurate*, not just *present*:
+
+```bash
+# Full 5-level verification
+evospec verify
+
+# CI gate: exit non-zero if verification fails
+evospec verify --strict
+
+# Markdown report for documentation
+evospec verify --format markdown
+```
+
+**Five verification levels:**
+
+| Level | What it checks | Example |
+|-------|---------------|---------|
+| **1. Entities** | Do spec entities match code classes/fields? | `Order.status` in spec → `status = Column(String)` in code |
+| **2. API endpoints** | Do documented endpoints exist in code? | `POST /api/orders` in spec → `@router.post("/api/orders")` |
+| **3. Invariants** | Are invariants enforced in code + tested? | `INV-001` → validation function + test case |
+| **4. Bounded contexts** | Do spec contexts match code structure? | `orders` context → `src/orders/` directory |
+| **5. Consistency** | Do specs reference each other correctly? | Entity names match across specs |
+
+**Overall score**: Weighted average across all 5 levels (0–100%).
+
+## Retroactive Spec Generation
+
+The biggest adoption barrier: *"We have 500K lines of code and no specs."*
+
+`evospec capture --from-history` solves the cold start problem:
+
+```bash
+# Analyze full git history → detect feature clusters → generate specs
+evospec capture --from-history
+
+# Start from a specific point
+evospec capture --from-history --since v2.0
+
+# Tune clustering
+evospec capture --from-history --min-cluster-size 3 --max-clusters 10
+```
+
+**How it works:**
+
+1. **Parse git log** — extracts commits and files changed together
+2. **Build co-change graph** — files that change in the same commit get weighted edges
+3. **Community detection** — label propagation algorithm finds natural clusters (no ML, no external deps)
+4. **Auto-label** — clusters named from conventional commit scopes (`feat(auth):`), directory structure, or commit message topics
+5. **Generate specs** — each cluster becomes a `specs/changes/retroactive-*/` with spec.yaml + discovery-spec.md
+6. **Extract entities** — scans code for class definitions, appends to `entities.yaml`
+7. **Update features** — adds feature entries to `features.yaml`
+
+Generated specs are drafts — review, rename, and promote to hybrid/core as needed.
+
+## Deep Reverse Engineering
+
+Standard `evospec reverse` does surface-level code scanning. Add `--deep` for richer analysis:
+
+```bash
+# Standard: extract API routes
+evospec reverse api --framework fastapi
+
+# Deep: extract API routes + request/response schemas + suggested invariants
+evospec reverse api --framework fastapi --deep
+
+# Deep DB: extract models + column types + relationships + suggested invariants
+evospec reverse db --framework sqlalchemy --deep
+
+# Deep dependencies: extract imports + call graphs + coupling metrics
+evospec reverse deps --deep
+```
+
+**Deep mode adds:**
+- **Schema extraction** — request/response models, field types, validation rules
+- **Invariant detection** — suggests invariants from validation code, constraints, guards
+- **Relationship mapping** — foreign keys, association tables, entity relationships
+- **Confidence levels** — each suggestion tagged high/medium/low confidence
+
+**Supported frameworks:**
+
+| Language | API | DB | CLI |
+|----------|-----|-----|-----|
+| **Python** | FastAPI, Django, Flask | SQLAlchemy, Django ORM | Click |
+| **Go** | gin, echo, fiber, chi, gorilla, net-http | GORM | Cobra |
+| **Java/Kotlin** | Spring Boot | JPA/Hibernate | Picocli, Spring Shell |
+| **JS/TS** | Express, Next.js, NestJS, Hono, Fastify | Prisma, TypeORM, Sequelize | — |
 
 ## Intellectual Foundations
 
@@ -446,6 +642,37 @@ fitness_functions:
 5. **Teams own contexts.** Specs map to bounded contexts, contexts map to teams.
 6. **AI accelerates, humans decide.** AI generates and reverse-engineers. Humans review and own.
 7. **Guardrails are executable.** If it's not automated, it's a suggestion.
+
+## CLI Reference
+
+| Command | Description |
+|---------|-------------|
+| `evospec init` | Initialize EvoSpec in the current project. Options: `--name`, `--detect`, `--specs-dir` |
+| `evospec new <title>` | Create a new change spec. Options: `--zone edge\|hybrid\|core`, `--type` |
+| `evospec classify <path>` | Interactively classify a change by zone |
+| `evospec check` | Run spec validations + invariant impact checks. Options: `--strict`, `--run-fitness` |
+| `evospec fitness` | Run all fitness functions defined in spec.yaml files |
+| `evospec sync` | Detect spec drift from git changes. Options: `--since`, `--generate`, `--ci` |
+| `evospec verify` | Verify spec accuracy against code (5 levels). Options: `--strict`, `--format` |
+| `evospec capture --from-history` | Generate retroactive specs from git history. Options: `--since`, `--min-cluster-size` |
+| `evospec reverse api` | Reverse-engineer API routes (auto-detects framework). Options: `--framework`, `--deep`, `--write` |
+| `evospec reverse db` | Reverse-engineer DB models. Options: `--deep`, `--write` |
+| `evospec reverse deps` | Reverse-engineer cross-system dependencies. Options: `--deep`, `--write` |
+| `evospec reverse cli` | Reverse-engineer CLI/module structure |
+| `evospec deprecate contract <endpoint>` | Mark an API endpoint as deprecated. Options: `--replacement`, `--sunset` |
+| `evospec deprecate entity <name>` | Mark a domain entity as deprecated. Options: `--replacement` |
+| `evospec archive` | Archive completed/abandoned specs. Options: `--id`, `--status`, `--dry-run` |
+| `evospec adr new <title>` | Create an ADR. `evospec adr list` to list all |
+| `evospec feature add <title>` | Add a feature. `evospec feature list`, `evospec feature update` |
+| `evospec learn` | Record experiment results and update discovery assumptions |
+| `evospec contract` | *(AI workflow)* Create a domain contract — use `/evospec.contract` in your IDE |
+| `evospec tasks` | *(AI workflow)* Generate implementation tasks — use `/evospec.tasks` in your IDE |
+| `evospec implement` | *(AI workflow)* Execute tasks — use `/evospec.implement` in your IDE |
+| `evospec prompt` | Emit AI bootstrap prompt. Options: `--detect`, `--format json` |
+| `evospec status` | Show status of all change specs. Options: `--include-archived` |
+| `evospec render` | Render all specs into consolidated markdown. Options: `--include-archived` |
+| `evospec generate agents` | Regenerate AI agent files. Options: `--platform windsurf\|claude\|cursor\|skills` |
+| `evospec serve` | Start the MCP server for AI agent integration |
 
 ## Getting Started
 
