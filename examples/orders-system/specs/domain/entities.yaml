@@ -1,0 +1,84 @@
+# Domain Entity Registry — Orders System
+# Flat YAML list (no wrapping key) — loaded by _merge_domain_files as config["domain"]["entities"]
+
+- name: "Order"
+  context: "orders"
+  table: "orders"
+  aggregate_root: true
+  description: "A customer order containing one or more items. Subject to category restrictions."
+  fields:
+    - name: "id"
+      type: "uuid"
+      constraints: "primary key, not null"
+    - name: "customer_id"
+      type: "uuid"
+      constraints: "not null, FK → customers"
+    - name: "status"
+      type: "enum(draft, confirmed, shipped, delivered, cancelled)"
+      constraints: "not null, default: draft"
+    - name: "created_at"
+      type: "timestamp"
+      constraints: "not null"
+    - name: "total_amount"
+      type: "decimal(10,2)"
+      constraints: "not null, >= 0"
+  relationships:
+    - target: "Item"
+      type: "one-to-many"
+      field: "order_id"
+  invariants:
+    - "ORD-INV-001"
+    - "ORD-INV-002"
+    - "ORD-INV-003"
+
+- name: "Item"
+  context: "orders"
+  table: "order_items"
+  aggregate_root: false
+  description: "A line item within an order, linked to exactly one category."
+  fields:
+    - name: "id"
+      type: "uuid"
+      constraints: "primary key, not null"
+    - name: "order_id"
+      type: "uuid"
+      constraints: "not null, FK → orders"
+    - name: "product_name"
+      type: "string"
+      constraints: "not null, max 200 chars"
+    - name: "category_id"
+      type: "uuid"
+      constraints: "not null, FK → categories"
+    - name: "quantity"
+      type: "integer"
+      constraints: "not null, > 0"
+    - name: "unit_price"
+      type: "decimal(10,2)"
+      constraints: "not null, >= 0"
+  relationships:
+    - target: "Order"
+      type: "many-to-one"
+      field: "order_id"
+    - target: "Category"
+      type: "many-to-one"
+      field: "category_id"
+  invariants:
+    - "ORD-INV-002"
+
+- name: "Category"
+  context: "orders"
+  table: "categories"
+  aggregate_root: false
+  description: "Product category. Some categories are mutually exclusive within a single order."
+  fields:
+    - name: "id"
+      type: "uuid"
+      constraints: "primary key, not null"
+    - name: "name"
+      type: "string"
+      constraints: "not null, unique"
+    - name: "restriction_group"
+      type: "string"
+      constraints: "nullable — categories in the same restriction_group are mutually exclusive per order"
+  invariants:
+    - "ORD-INV-002"

@@ -1,0 +1,4 @@
+- name: "orders"
+  owner: "orders-team"
+  type: "core"
+  description: "Order lifecycle management — creation, item management, category restrictions, fulfillment."

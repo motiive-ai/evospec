@@ -1,0 +1,161 @@
+contracts:
+  - endpoint: "GET /api/orders/{orderId}"
+    description: "Get a single order with all its items and categories"
+    params:
+      - name: "orderId"
+        in: "path"
+        type: "uuid"
+        required: true
+    response:
+      200:
+        fields:
+          - name: "id"
+            type: "uuid"
+          - name: "customer_id"
+            type: "uuid"
+          - name: "status"
+            type: "string (draft|confirmed|shipped|delivered|cancelled)"
+          - name: "total_amount"
+            type: "decimal"
+          - name: "items"
+            type: "List<Item>"
+          - name: "created_at"
+            type: "ISO 8601 timestamp"
+    auth: "bearer token"
+    tags: ["orders", "read"]
+
+  - endpoint: "GET /api/orders"
+    description: "List orders with pagination and optional filters"
+    params:
+      - name: "page"
+        in: "query"
+        type: "integer"
+        required: false
+      - name: "status"
+        in: "query"
+        type: "string"
+        required: false
+      - name: "customer_id"
+        in: "query"
+        type: "uuid"
+        required: false
+    response:
+      200:
+        fields:
+          - name: "orders"
+            type: "List<OrderSummary>"
+          - name: "total"
+            type: "integer"
+          - name: "page"
+            type: "integer"
+    auth: "bearer token"
+    tags: ["orders", "read"]
+
+  - endpoint: "POST /api/orders"
+    description: "Create a new order in draft status"
+    request:
+      content_type: "application/json"
+      fields:
+        - name: "customer_id"
+          type: "uuid"
+          required: true
+        - name: "items"
+          type: "List<{product_name, category_id, quantity, unit_price}>"
+          required: true
+    response:
+      201:
+        fields:
+          - name: "id"
+            type: "uuid"
+          - name: "status"
+            type: "string (draft)"
+      409:
+        fields:
+          - name: "error"
+            type: "string"
+          - name: "code"
+            type: "CATEGORY_RESTRICTION_VIOLATED"
+          - name: "detail"
+            type: "string — e.g. 'Items from categories chemical and food cannot coexist in the same order'"
+    auth: "bearer token"
+    tags: ["orders", "write"]
+
+  - endpoint: "POST /api/orders/{orderId}/items"
+    description: "Add an item to a draft order. Returns 409 if category restriction is violated."
+    params:
+      - name: "orderId"
+        in: "path"
+        type: "uuid"
+        required: true
+    request:
+      content_type: "application/json"
+      fields:
+        - name: "product_name"
+          type: "string"
+          required: true
+        - name: "category_id"
+          type: "uuid"
+          required: true
+        - name: "quantity"
+          type: "integer"
+          required: true
+        - name: "unit_price"
+          type: "decimal"
+          required: true
+    response:
+      201:
+        fields:
+          - name: "id"
+            type: "uuid"
+      409:
+        fields:
+          - name: "error"
+            type: "string"
+          - name: "code"
+            type: "CATEGORY_RESTRICTION_VIOLATED"
+    auth: "bearer token"
+    tags: ["orders", "write"]
+
+  - endpoint: "POST /api/orders/{orderId}/confirm"
+    description: "Confirm a draft order. Locks items."
+    params:
+      - name: "orderId"
+        in: "path"
+        type: "uuid"
+        required: true
+    response:
+      200:
+        fields:
+          - name: "status"
+            type: "string (confirmed)"
+      422:
+        fields:
+          - name: "error"
+            type: "string — e.g. 'Order must have at least one item'"
+    auth: "bearer token"
+    tags: ["orders", "write"]
+
+  - endpoint: "GET /api/orders/{orderId}/export"
+    description: "Download order as a structured JSON file (see file-schemas.yaml for format)"
+    params:
+      - name: "orderId"
+        in: "path"
+        type: "uuid"
+        required: true
+    response:
+      200:
+        fields:
+          - name: "(file download)"
+            type: "application/json — OrderExport schema"
+    auth: "bearer token"
+    tags: ["orders", "read", "export"]
+
+  - endpoint: "GET /api/categories"
+    description: "List all product categories with restriction groups"
+    response:
+      200:
+        fields:
+          - name: "categories"
+            type: "List<Category>"
+    auth: "bearer token"
+    tags: ["categories", "read"]
