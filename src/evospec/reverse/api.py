@@ -22,6 +22,41 @@ ALL_FRAMEWORKS = sorted(
 )
 
 
+def _auto_detect_framework(root: Path, config: dict) -> str | None:
+    """Auto-detect API framework by scanning source files for imports."""
+    configured = config.get("reverse", {}).get("source_dirs", [])
+    source_dirs = [root / d for d in configured] if configured else [root]
+
+    # Patterns: (framework_name, file_extensions, import_patterns)
+    detectors = [
+        ("fastapi", {".py"}, ["from fastapi", "import fastapi"]),
+        ("django", {".py"}, ["from django.urls", "from django.http", "urlpatterns"]),
+        ("flask", {".py"}, ["from flask", "import flask", "Flask(__name__"]),
+        ("spring", {".java", ".kt"}, ["@RestController", "@RequestMapping", "@GetMapping", "@PostMapping"]),
+        ("gin", {".go"}, ["github.com/gin-gonic/gin"]),
+        ("echo", {".go"}, ["github.com/labstack/echo"]),
+        ("fiber", {".go"}, ["github.com/gofiber/fiber"]),
+        ("chi", {".go"}, ["github.com/go-chi/chi"]),
+        ("express", {".js", ".ts", ".mjs"}, ["require('express')", "require(\"express\")", "from 'express'", "from \"express\""]),
+        ("nextjs", {".js", ".ts", ".jsx", ".tsx"}, ["next/server", "NextResponse", "NextRequest"]),
+        ("nestjs", {".ts"}, ["@nestjs/common", "@Controller", "@Injectable"]),
+        ("hono", {".ts", ".js"}, ["from 'hono'", "from \"hono\"", "require('hono')"]),
+        ("fastify", {".js", ".ts"}, ["require('fastify')", "from 'fastify'", "from \"fastify\""]),
+    ]
+
+    for fw_name, extensions, patterns in detectors:
+        files = _iter_files(source_dirs, extensions)
+        for f in files[:200]:  # limit scan to avoid slowness
+            text = _read_safe(f)
+            if text is None:
+                continue
+            for pattern in patterns:
+                if pattern in text:
+                    console.print(f"[green]✓[/green] Auto-detected framework: [cyan]{fw_name}[/cyan]")
+                    return fw_name
+    return None
+
+
 def _iter_files(source_dirs: list[Path], extensions: set[str]) -> list[Path]:
     """Yield source files matching the given extensions from source_dirs."""
     files: list[Path] = []
@@ -62,7 +97,9 @@ def reverse_engineer_api(
     fw = framework or config.get("reverse", {}).get("framework", "")
 
     if not fw:
-        console.print("[red]✗ No framework specified. Use --framework or set reverse.framework in evospec.yaml[/red]")
+        fw = _auto_detect_framework(root, config)
+    if not fw:
+        console.print("[red]✗ No framework detected. Use --framework or set reverse.framework in evospec.yaml[/red]")
         return
 
     source_dirs = []

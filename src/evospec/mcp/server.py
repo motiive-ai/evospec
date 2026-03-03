@@ -256,6 +256,7 @@ def list_specs(
                 "risk": spec.get("classification", {}).get("risk", "unknown"),
                 "artifacts": artifacts,
                 "path": str(spec_dir.relative_to(root)),
+                "invariant_count": len(spec.get("invariants", [])),
             }
             if is_archive:
                 entry["archived"] = True
@@ -1800,13 +1801,21 @@ def _build_invariants_text(context: str | None = None) -> str:
         return "ERROR: No evospec.yaml found."
 
     specs_dir = root / "specs" / "changes"
-    if not specs_dir.exists():
+    archive_dir = root / "specs" / "archive"
+    if not specs_dir.exists() and not archive_dir.exists():
         return "No specs directory found."
 
     lines = ["# All Invariants (Core Safety Net)", ""]
     count = 0
 
-    for spec_dir in sorted(specs_dir.iterdir()):
+    # Scan both changes/ and archive/ — invariants are permanent safety nets
+    all_spec_dirs: list[Path] = []
+    if specs_dir.exists():
+        all_spec_dirs.extend(sorted(specs_dir.iterdir()))
+    if archive_dir.exists():
+        all_spec_dirs.extend(sorted(archive_dir.iterdir()))
+
+    for spec_dir in all_spec_dirs:
         spec_yaml = spec_dir / "spec.yaml"
         if not spec_yaml.exists():
             continue

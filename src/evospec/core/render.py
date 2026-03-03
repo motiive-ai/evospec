@@ -10,7 +10,7 @@ from evospec.core.config import find_project_root, load_config, get_paths
 console = Console()
 
 
-def render_specs() -> None:
+def render_specs(include_archived: bool = False) -> None:
     """Render all specs into a single consolidated markdown file."""
     root = find_project_root()
     if root is None:
@@ -43,6 +43,12 @@ def render_specs() -> None:
         spec_dirs = sorted(
             [d for d in specs_root.iterdir() if d.is_dir() and (d / "spec.yaml").exists()]
         )
+        # Include archived specs if requested
+        archive_root = root / "specs" / "archive"
+        if include_archived and archive_root.exists():
+            spec_dirs.extend(sorted(
+                [d for d in archive_root.iterdir() if d.is_dir() and (d / "spec.yaml").exists()]
+            ))
 
         if spec_dirs:
             output_lines.append("## Change Specifications\n\n")
@@ -96,5 +102,11 @@ def render_specs() -> None:
     output_path = root / "SPECS.md"
     output_path.write_text("".join(output_lines))
 
+    spec_count = len([d for d in specs_root.iterdir() if d.is_dir()] if specs_root.exists() else [])
     console.print(f"[bold green]✓ Rendered to {output_path.relative_to(root)}[/bold green]")
-    console.print(f"  Includes {len([d for d in specs_root.iterdir() if d.is_dir()] if specs_root.exists() else [])} spec(s)")
+    console.print(f"  Includes {spec_count} spec(s)")
+    archive_root = root / "specs" / "archive"
+    if not include_archived and archive_root.exists():
+        archive_count = sum(1 for d in archive_root.iterdir() if d.is_dir() and (d / "spec.yaml").exists())
+        if archive_count > 0:
+            console.print(f"[dim]  {archive_count} archived spec(s) not included — use --include-archived to add them[/dim]")

@@ -142,8 +142,14 @@ def run_checks(strict: bool = False) -> None:
     errors += e_api
     warnings += w_api
 
-    # Cross-spec invariant impact check
-    e, w = _check_cross_spec_invariants(spec_dirs, root)
+    # Cross-spec invariant impact check (include archived specs — invariants are permanent)
+    all_dirs_for_invariants = list(spec_dirs)
+    archive_root = root / "specs" / "archive"
+    if archive_root.exists():
+        all_dirs_for_invariants.extend(sorted(
+            d for d in archive_root.iterdir() if d.is_dir() and (d / "spec.yaml").exists()
+        ))
+    e, w = _check_cross_spec_invariants(all_dirs_for_invariants, root)
     errors += e
     warnings += w
 

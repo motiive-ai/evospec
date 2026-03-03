@@ -126,6 +126,9 @@ def create_spec(
         console.print()
         console.print("Next: run [bold]evospec classify[/bold] to set the zone.")
 
+    console.print()
+    console.print(f"[dim]Track as feature: evospec feature add \"{title}\" --zone {zone or 'edge'}[/dim]")
+
 
 def _render_template(
     template_path: Path,

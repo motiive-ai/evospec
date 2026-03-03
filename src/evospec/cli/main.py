@@ -125,7 +125,19 @@ def verify(strict: bool, output_format: str) -> None:
 @click.option("--min-cluster-size", default=2, type=int, help="Minimum files per cluster (default: 2).")
 @click.option("--max-clusters", default=20, type=int, help="Maximum clusters to generate (default: 20).")
 def capture(from_history: bool, since: str | None, min_cluster_size: int, max_clusters: int) -> None:
-    """Generate retroactive specs from existing codebase."""
+    """Generate retroactive specs from git history (co-change clustering).
+
+    This command analyzes git commit history to detect feature clusters and
+    generates spec.yaml + discovery-spec.md for each cluster.
+
+    \b
+    Note: This is different from /evospec.capture (AI workflow), which scans
+    the current codebase to generate implementation-spec.md for a single spec.
+
+    \b
+      CLI capture --from-history:  git history → multiple spec stubs
+      /evospec.capture workflow:   live code → implementation-spec.md
+    """
     if from_history:
         from evospec.core.capture import run_capture_from_history
 
@@ -134,6 +146,38 @@ def capture(from_history: bool, since: str | None, min_cluster_size: int, max_cl
             min_cluster_size=min_cluster_size,
             max_clusters=max_clusters,
         )
+
+
+@cli.group()
+def deprecate() -> None:
+    """Mark API contracts or entities as deprecated."""
+
+
+@deprecate.command("contract")
+@click.argument("endpoint")
+@click.option("--replacement", default=None, help="Replacement endpoint path.")
+@click.option("--sunset", default=None, help="ISO date when the endpoint will be removed.")
+def deprecate_contract(endpoint: str, replacement: str | None, sunset: str | None) -> None:
+    """Deprecate an API contract endpoint.
+
+    ENDPOINT is the endpoint path to deprecate (e.g., 'GET /api/orders/all').
+    """
+    from evospec.core.deprecate import deprecate_item
+
+    deprecate_item(kind="contract", name=endpoint, replacement=replacement, sunset_date=sunset)
+
+
+@deprecate.command("entity")
+@click.argument("name")
+@click.option("--replacement", default=None, help="Replacement entity name.")
+def deprecate_entity(name: str, replacement: str | None) -> None:
+    """Deprecate a domain entity.
+
+    NAME is the entity name to deprecate (e.g., 'OrderV1').
+    """
+    from evospec.core.deprecate import deprecate_item
+
+    deprecate_item(kind="entity", name=name, replacement=replacement)
 
 
 @cli.command()
@@ -213,19 +257,21 @@ def reverse_deps(source: str | None, deep: bool, write: bool) -> None:
 
 
 @cli.command()
-def render() -> None:
+@click.option("--include-archived", is_flag=True, help="Include archived specs in the rendered output.")
+def render(include_archived: bool) -> None:
     """Render all specs into a consolidated markdown document."""
     from evospec.core.render import render_specs
 
-    render_specs()
+    render_specs(include_archived=include_archived)
 
 
 @cli.command()
-def status() -> None:
+@click.option("--include-archived", is_flag=True, help="Include archived specs in the output.")
+def status(include_archived: bool) -> None:
     """Show the status of all change specs."""
     from evospec.core.status import show_status
 
-    show_status()
+    show_status(include_archived=include_archived)
 
 
 @cli.group()
@@ -283,6 +329,60 @@ def learn(spec_path: str | None) -> None:
     from evospec.core.discovery import record_learning
 
     record_learning(spec_path=spec_path)
+
+
+@cli.command()
+def contract() -> None:
+    """Create a domain contract for a change spec.
+
+    This is an AI agent workflow. Use one of:
+
+    \b
+      Windsurf:    /evospec.contract
+      Claude Code: reads CLAUDE.md (section: contract)
+      Cursor:      @evospec-contract
+    """
+    click.echo("evospec contract is an AI agent workflow.\n")
+    click.echo("Use your IDE's AI agent with one of these commands:")
+    click.echo("  Windsurf:    /evospec.contract")
+    click.echo("  Claude Code: reads CLAUDE.md (section: contract)")
+    click.echo("  Cursor:      @evospec-contract")
+
+
+@cli.command()
+def tasks() -> None:
+    """Generate implementation tasks from a spec.
+
+    This is an AI agent workflow. Use one of:
+
+    \b
+      Windsurf:    /evospec.tasks
+      Claude Code: reads CLAUDE.md (section: tasks)
+      Cursor:      @evospec-tasks
+    """
+    click.echo("evospec tasks is an AI agent workflow.\n")
+    click.echo("Use your IDE's AI agent with one of these commands:")
+    click.echo("  Windsurf:    /evospec.tasks")
+    click.echo("  Claude Code: reads CLAUDE.md (section: tasks)")
+    click.echo("  Cursor:      @evospec-tasks")
+
+
+@cli.command()
+def implement() -> None:
+    """Execute implementation tasks from tasks.md.
+
+    This is an AI agent workflow. Use one of:
+
+    \b
+      Windsurf:    /evospec.implement
+      Claude Code: reads CLAUDE.md (section: implement)
+      Cursor:      @evospec-implement
+    """
+    click.echo("evospec implement is an AI agent workflow.\n")
+    click.echo("Use your IDE's AI agent with one of these commands:")
+    click.echo("  Windsurf:    /evospec.implement")
+    click.echo("  Claude Code: reads CLAUDE.md (section: implement)")
+    click.echo("  Cursor:      @evospec-implement")
 
 
 @cli.command()

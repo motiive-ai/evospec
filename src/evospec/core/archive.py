@@ -102,6 +102,10 @@ def run_archive(
         else:
             archived_paths.append(str(rel_path))
 
+    # Update features.yaml spec_path references
+    if not dry_run and archived_paths:
+        _update_feature_paths(root, to_archive)
+
     console.print()
     if dry_run:
         console.print(f"[dim]Dry run — no files moved. Run without --dry-run to archive.[/]")
@@ -111,3 +115,34 @@ def run_archive(
         console.print("[dim]Use include_archived=True or --include-archived to see them.[/]")
 
     return {"archived": archived_paths, "count": len(archived_paths)}
+
+
+def _update_feature_paths(root: Path, archived_specs: list[tuple[Path, dict]]) -> None:
+    """Update features.yaml spec_path entries that pointed to archived specs."""
+    features_path = root / "specs" / "domain" / "features.yaml"
+    if not features_path.exists():
+        return
+
+    features = yaml.safe_load(features_path.read_text()) or []
+    if not isinstance(features, list):
+        return
+
+    # Build mapping: old relative path → new relative path
+    path_map: dict[str, str] = {}
+    for spec_dir, _ in archived_specs:
+        old_rel = str(spec_dir.relative_to(root))
+        new_rel = f"specs/archive/{spec_dir.name}"
+        path_map[old_rel] = new_rel
+
+    updated = False
+    for feat in features:
+        spec_path = feat.get("spec_path", "")
+        if spec_path in path_map:
+            feat["spec_path"] = path_map[spec_path]
+            updated = True
+
+    if updated:
+        features_path.write_text(
+            yaml.dump(features, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        )
+        console.print("[dim]Updated features.yaml spec_path references.[/]")
